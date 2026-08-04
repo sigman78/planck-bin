@@ -1,0 +1,367 @@
+:root {
+    /* background layers (darkest to lightest) */
+    --color-bg:          #002b36;   /* page/body background (solarized base03) */
+    --color-key-bg:      #00222b;   /* logo box (box1) */
+    --color-nav-bg:      #08323c;   /* button bar (box2) */
+    --color-tooltip-bg:  #173e48;   /* shortcut tooltip (box3) */
+
+    /* content colors */
+    --color-editor-text: #93a1a1;   /* editor text (solarized base1) */
+    --color-placeholder: #586e75;   /* editor placeholder (solarized base01) */
+    --color-icon:        #c4dce3;   /* nav icons + pointer bar + tooltip shortcut */
+    --color-accent:      #d33682;   /* progress bar, logo hover, icon hover (solarized magenta) */
+    --color-logo:        #fdf6e3;   /* logo fill (solarized base3) */
+
+    /* ui / overlay colors */
+    --color-toast-bg:    #a31515;   /* error toast background (info toasts reuse tooltip bg) */
+    --color-text-bright: #fff;      /* toast text, tooltip label */
+    --color-line-highlight: rgba(255, 255, 255, 0.03); /* current line highlight */
+    --color-selection:   #114955;   /* solid selection background with stronger contrast */
+
+    /* typography */
+    --font-editor: monospace;
+    --font-ui: Helvetica, sans-serif;
+    --font-size-editor: 13px;       /* editor base size (used in zoom calc) */
+    --line-height-editor: 1.5;      /* explicit line-height to keep gutter and editor in sync across browsers */
+
+    /* layout */
+    --body-padding: 20px;
+}
+
+#progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 0%;
+    background: var(--color-accent);
+    z-index: 2001;
+    transition: width 0.8s ease, opacity 0.3s ease;
+    opacity: 0;
+}
+
+#progress-bar.running {
+    opacity: 1;
+    width: 100%;
+    transition: width 0.5s cubic-bezier(0.1, 0.05, 0.1, 1), opacity 0.1s ease;
+}
+
+#progress-bar.done {
+    opacity: 0;
+    width: 100%;
+    transition: width 0.1s ease, opacity 0.15s ease 0.15s;
+}
+
+#progress-bar.clear {
+    opacity: 0;
+    width: 0%;
+}
+
+#toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-tooltip-bg);
+    color: var(--color-text-bright);
+    padding: 10px 20px;
+    border-radius: 3px;
+    font-family: var(--font-ui);
+    font-size: var(--font-size-editor);
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+#toast.error {
+    background: var(--color-toast-bg);
+}
+
+#toast.visible {
+    opacity: 1;
+}
+
+html, body {
+	height: 100%;
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	background: var(--color-bg);
+	padding: var(--body-padding);
+	box-sizing: border-box;
+}
+
+/* editor - shared editing and presenting styles */
+
+#editor-container {
+    display: flex;
+    align-items: flex-start;
+    --editor-zoom: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+
+    /* Consolidated typography - all children inherit these */
+    font-family: var(--font-editor);
+    font-size: calc(var(--font-size-editor) * var(--editor-zoom));
+    line-height: var(--line-height-editor);
+}
+
+#gutter {
+    flex-shrink: 0;
+    width: calc(3ch + 16px);
+    padding-right: 12px;
+    text-align: right;
+    color: var(--color-placeholder);
+    user-select: none;
+    min-height: calc(100vh - 2 * var(--body-padding));
+    box-sizing: border-box;
+}
+
+#gutter a, #gutter span {
+    display: block;
+}
+
+#gutter a {
+    color: inherit;
+    text-decoration: none;
+    scroll-margin-top: 50vh; /* make activated anchor v-centered */
+}
+
+#gutter a:hover {
+    color: var(--color-editor-text);
+}
+
+#line-highlight {
+    position: absolute;
+    left: 0;
+    right: 0;
+    --line-index: 0;
+    --line-h: calc(1em * var(--line-height-editor));
+    top: calc(var(--line-index) * var(--line-h) - 1px);
+    height: calc(var(--line-h) + 2px);
+    background: var(--color-line-highlight);
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+/* Use lh unit when supported for precise line-height matching */
+@supports (height: 1lh) {
+    #line-highlight {
+        top: calc(var(--line-index) * 1lh - 1px);
+        height: calc(1lh + 2px);
+    }
+}
+
+#line-highlight.visible {
+    opacity: 1;
+}
+
+/* Textarea editor (edit mode) */
+#editor {
+    resize: none;
+    border: none;
+    padding: 0;
+    background: transparent;
+    color: var(--color-editor-text);
+    width: 100%;
+    outline: none;
+    white-space: pre;
+    overflow-x: auto;
+    overflow-y: hidden;
+    field-sizing: content;
+    tab-size: 2;
+    min-height: calc(100vh - 2 * var(--body-padding));
+    position: relative;
+    z-index: 1;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+#editor::placeholder {
+    color: var(--color-placeholder);
+}
+
+#editor::selection {
+    background: var(--color-selection) !important;
+    color: inherit !important;
+}
+
+/* Viewer (present mode) */
+#viewer {
+    display: none;
+    margin: 0;
+    background: transparent;
+    width: 100%;
+    white-space: pre;
+    overflow-x: auto;
+    tab-size: 2;
+    scrollbar-width: thin;
+    min-height: calc(100vh - 2 * var(--body-padding));
+    position: relative;
+    z-index: 1;
+    transition: opacity 0.15s;
+}
+
+#viewer code {
+    display: block;
+    background: transparent !important;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+#viewer::selection,
+#viewer *::selection {
+    background: var(--color-selection) !important;
+}
+
+#viewer.is-loading {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* key */
+
+#key {
+	position: fixed;
+	top: 0px;
+	right: 0px;
+	z-index: +1000; /* watch out */
+	box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#box1 {
+	padding: 5px;
+	text-align: center;
+	background: var(--color-key-bg);
+	font-size: 0; /* fix safari font-size dependance */
+}
+
+#box2 {
+	background: var(--color-nav-bg);
+	font-size: 0px;
+	padding: 0px 5px;
+}
+
+#box1 a.logo, #box1 a.logo:visited {
+	display: inline-block;
+	width: 126px;
+	height: 42px;
+	mask: url('logo.svg') no-repeat center;
+  	mask-size: contain;
+	background-color: var(--color-logo);
+  	transition: background-color 0.15s ease;
+}
+
+#box1 a.logo:hover {
+    background-color: var(--color-accent);
+}
+
+#box2 .function {
+	width: 32px;
+	height: 37px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	opacity: 0.3;
+}
+
+#box2 .link embed {
+	vertical-align: bottom; /* fix for zeroClipboard style */
+}
+
+#box2 .function svg {
+	color: var(--color-icon);
+	display: block;
+}
+
+#box2 .function.enabled {
+	opacity: 0.8;
+}
+
+#box2 .function.enabled:hover {
+	cursor: hand;
+	cursor: pointer;
+	opacity: 1;
+}
+
+#box2 .function.enabled:hover svg {
+	color: var(--color-accent);
+	display: block;
+}
+
+#pointer {
+	display: block;
+	height: 3px;
+	width: 32px;
+	background: var(--color-icon);
+	bottom: 0px;
+	position: absolute;
+	margin: auto;
+	left: 0px;
+	right: 0px;
+}
+
+#box3 {
+	background: var(--color-tooltip-bg);
+	font-family: var(--font-ui);
+	font-size: 12px;
+	line-height: 14px;
+	padding: 10px 15px;
+}
+
+#box3 .label {
+	color: var(--color-text-bright);
+	font-weight: bold;
+}
+
+#box3 .shortcut {
+	color: var(--color-icon);
+	font-weight: normal;
+}
+
+/* --- hide elements for printing --- */
+.no-print {}
+
+@media print {
+	.no-print {
+		display: none !important;
+	}
+}
+
+
+#drop-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    background: rgba(0, 43, 54, 0.85);
+    pointer-events: none;
+    align-items: center;
+    justify-content: center;
+}
+
+#drop-overlay.visible {
+    display: flex;
+}
+
+.drop-overlay-plaque {
+    padding: 20px 36px;
+    background: var(--color-key-bg);
+    color: var(--color-editor-text);
+    font-family: var(--font-ui);
+    font-size: var(--font-size-editor);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}

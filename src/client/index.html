@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>hastebin</title>
+
+		<link rel="stylesheet" type="text/css" href="./solarized_dark.css" />
+		<link rel="stylesheet" type="text/css" href="./application.css" />
+		<link rel="stylesheet" type="text/css" href="./view-transitions.css" />
+
+		<link rel="icon" href="./favicon.ico" />
+
+		<meta name="robots" content="noindex,nofollow" />
+
+		<script type="module" src="./application.ts"></script>
+	</head>
+
+	<body>
+		<div id="progress-bar"></div>
+		<div id="toast" aria-live="assertive" aria-atomic="true"></div>
+		<header id="key" class="no-print">
+			<div id="pointer" style="display: none;" aria-hidden="true"></div>
+			<div id="box1">
+				<a href="/about.md" class="logo" aria-label="About hastebin"></a>
+			</div>
+			<nav id="box2">
+				<div class="save function" aria-label="Save Paste" type="button"></div>
+				<div class="new function" aria-label="New Paste" type="button"></div>
+				<div class="duplicate function" aria-label="Duplicate Paste" type="button"></div>
+				<div class="copylink function" aria-label="Copy Link" type="button"></div>
+				<div class="raw function" aria-label="View Raw" type="button"></div>
+				<div class="twitter function" aria-label="Post to twitter" type="button"></div>
+			</nav>
+			<div id="box3" style="display: none;" aria-hidden="true">
+				<div class="label"></div>
+				<div class="shortcut"></div>
+			</div>
+		</header>
+
+		<div id="editor-container">
+			<div id="gutter" aria-hidden="true"></div>
+			<div id="line-highlight" aria-hidden="true"></div>
+			<pre id="viewer"><code class="hljs"></code></pre>
+			<textarea id="editor" spellcheck="false"
+				placeholder="Paste your code here..."></textarea>
+		</div>
+		<div id="drop-overlay" aria-hidden="true">
+			<div class="drop-overlay-plaque">Drop file to editor</div>
+		</div>
+	</body>
+</html>

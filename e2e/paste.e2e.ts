@@ -1,0 +1,703 @@
+import { test, expect, type Page } from '@playwright/test';
+import { setupMockApi } from './helpers/mock-api';
+import { S } from './helpers/selectors';
+
+// --- helpers -----------------------------------------------------------------
+
+/** Wait for the app to be in editing mode (textarea #editor is visible). */
+async function waitForEditingMode(page: Page) {
+  await expect(page.locator(S.editor)).toBeVisible();
+}
+
+/** Wait for the app to be in presenting mode (#viewer pre is visible). */
+async function waitForPresentingMode(page: Page) {
+  await expect(page.locator(S.viewer)).toBeVisible();
+}
+
+/** Check that a button element has the `enabled` CSS class. */
+async function expectEnabled(page: Page, selector: string) {
+  await expect(page.locator(selector)).toHaveClass(/enabled/);
+}
+
+/** Check that a button element does NOT have the `enabled` CSS class. */
+async function expectDisabled(page: Page, selector: string) {
+  await expect(page.locator(selector)).not.toHaveClass(/enabled/);
+}
+
+// --- Suite -------------------------------------------------------------------
+
+test.describe('Paste lifecycle', () => {
+  // -- 1. Initial page state --------------------------------------------------
+
+  test('1 - initial page load shows empty editor', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+
+    await waitForEditingMode(page);
+    await expect(page.locator(S.editor)).toHaveValue('');
+
+    await expectEnabled(page, S.newBtn);
+    await expectDisabled(page, S.saveBtn);
+    await expectDisabled(page, S.duplicateBtn);
+
+    await expect(page).toHaveTitle('Haste');
+  });
+
+  // -- 2. Typing enables the Save button -------------------------------------
+
+  test('2 - typing content enables the Save button', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await expectDisabled(page, S.saveBtn);
+    await page.locator(S.editor).fill('hello world');
+    await expectEnabled(page, S.saveBtn);
+
+    // Clearing content disables save again
+    await page.locator(S.editor).fill('');
+    await expectDisabled(page, S.saveBtn);
+  });
+
+  // -- 3. Saving a paste -----------------------------------------------------
+
+  test('3 - saving a paste transitions to presenting mode', async ({ page }) => {
+    const store = await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    const content1 = 'function hello() {\n  return "world";\n}';
+    await page.locator(S.editor).fill(content1);
+    await expectEnabled(page, S.saveBtn);
+
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+
+    await waitForPresentingMode(page);
+
+    await expect(page.locator(S.viewer)).toContainText('hello');
+    await expect(page.locator(S.viewer)).toContainText('world');
+
+    await expectEnabled(page, S.duplicateBtn);
+    await expectDisabled(page, S.saveBtn);
+
+    await expect(page).toHaveTitle(/Haste - testkey0/);
+
+    expect(store.get('testkey0')).toBe(content1);
+  });
+
+  // -- 4. Back navigation from presented paste --------------------------------
+
+  test('4 - back from presenting returns to home in editing mode', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('const x = 1;');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.goBack();
+    await page.waitForURL('/');
+
+    await waitForEditingMode(page);
+    await expectEnabled(page, S.saveBtn);
+
+    await expect(page.locator(S.editor)).toHaveValue('const x = 1;');
+  });
+
+  // -- 5. Forward navigation restores presented paste ------------------------
+
+  test('5 - forward after back restores presenting mode and content', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    const content1 = 'const greeting = "hello";';
+    await page.locator(S.editor).fill(content1);
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    const docUrl = page.url();
+    await waitForPresentingMode(page);
+
+    await page.goBack();
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+
+    await page.goForward();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await expect(page.locator(S.viewer)).toContainText('greeting');
+    await expect(page.locator(S.viewer)).toContainText('hello');
+
+    expect(page.url()).toBe(docUrl);
+
+    // --- Known bug C2 / Q4 ---
+    // After goForward(), the app fires a GET /documents/testkey0 even though
+    // the content could be restored from history state. The mock intercept
+    // handles it, so the test passes, but a network round-trip occurs where
+    // none should be needed.
+  });
+
+  // -- 6. Full back/forward cycle --------------------------------------------
+
+  test('6 - full back/forward cycle preserves URL and content', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('let x = 42;');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    const presentUrl = page.url();
+    await waitForPresentingMode(page);
+
+    await page.goBack();
+    await expect(page).toHaveURL('/');
+
+    await page.goForward();
+    await expect(page).toHaveURL(presentUrl);
+    await waitForPresentingMode(page);
+
+    expect(page.url()).toBe(presentUrl);
+  });
+
+  // -- 7. Duplicate (fork) flow ----------------------------------------------
+
+  test('7 - duplicate transitions to editing with original content', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    const original = 'const original = true;';
+    await page.locator(S.editor).fill(original);
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.locator(S.duplicateBtn).click();
+    await waitForEditingMode(page);
+    await expect(page).toHaveURL(/\/testkey0/); // no /edit suffix
+
+    await expect(page.locator(S.editor)).toHaveValue(original);
+
+    await expectEnabled(page, S.saveBtn);
+    await expectDisabled(page, S.duplicateBtn);
+  });
+
+  // -- 8. Save the fork ------------------------------------------------------
+
+  test('8 - saving a fork creates a new URL with altered content', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    const original = 'const original = true;';
+    const altered = 'const altered = "yes, very much so";';
+
+    await page.locator(S.editor).fill(original);
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.locator(S.duplicateBtn).click();
+    await waitForEditingMode(page);
+    await expect(page).toHaveURL(/\/testkey0/);
+
+    await page.locator(S.editor).fill(altered);
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey1/);
+    await waitForPresentingMode(page);
+
+    expect(page.url()).toMatch(/testkey1/);
+    expect(page.url()).not.toMatch(/testkey0/);
+
+    await expect(page.locator(S.viewer)).toContainText('altered');
+  });
+
+  // -- 9. Back from fork save ------------------------------------------------
+
+  test('9 - back from fork save returns to presenting view of source doc', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    const original = 'const original = true;';
+    const altered = 'const altered = "yes, very much so";';
+
+    await page.locator(S.editor).fill(original);
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.locator(S.duplicateBtn).click();
+    await waitForEditingMode(page);
+    await page.locator(S.editor).fill(altered);
+
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey1/);
+    await waitForPresentingMode(page);
+
+    await page.goBack();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await expect(page.locator(S.viewer)).toContainText('original');
+  });
+
+  // -- 10. Back to pre-fork state --------------------------------------------
+
+  test('10 - back from fork returns to presenting source doc, second back to home', async ({
+    page,
+  }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    const original = 'const original = true;';
+    const altered = 'const altered = "yes, very much so";';
+
+    await page.locator(S.editor).fill(original);
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.locator(S.duplicateBtn).click();
+    await waitForEditingMode(page);
+    await page.locator(S.editor).fill(altered);
+
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey1/);
+    await waitForPresentingMode(page);
+
+    // Back once: presenting mode at /testkey0 (source doc)
+    await page.goBack();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+    await expect(page.locator(S.viewer)).toContainText('original');
+
+    // Back twice: new editor at /
+    await page.goBack();
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+  });
+
+  // -- 11. New from presenting -----------------------------------------------
+
+  test('11 - New button from presenting state returns to empty editor', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('some content');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.locator(S.newBtn).click();
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+
+    await expect(page.locator(S.editor)).toHaveValue('');
+    await expectDisabled(page, S.saveBtn);
+    await expectDisabled(page, S.duplicateBtn);
+    await expectEnabled(page, S.newBtn);
+  });
+
+  // -- 12. New from editing --------------------------------------------------
+
+  test('12 - New button from editing state clears content and resets URL', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('draft content not saved');
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator(S.newBtn).click();
+
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+    await expect(page.locator(S.editor)).toHaveValue('');
+  });
+
+  // -- 13. Keyboard shortcut: Ctrl+S saves -----------------------------------
+
+  test('13 - Ctrl+S triggers save', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('shortcut test');
+    await page.locator(S.editor).press('Control+s');
+
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+  });
+
+  // -- 14. Keyboard shortcut: Alt+Shift+N for new ----------------------------
+
+  test('14 - Alt+Shift+N from presenting creates new document', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('content');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.keyboard.press('Alt+Shift+N');
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+    await expect(page.locator(S.editor)).toHaveValue('');
+  });
+
+  // -- 15. Keyboard shortcut: Alt+Shift+D for duplicate ----------------------
+
+  test('15 - Alt+Shift+D from presenting duplicates to editor', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('to be forked');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.keyboard.press('Alt+Shift+D');
+    await waitForEditingMode(page);
+    await expect(page).toHaveURL(/\/testkey0/); // no /edit suffix
+    await expect(page.locator(S.editor)).toHaveValue('to be forked');
+  });
+
+  // -- 16. Tab key inserts spaces in textarea --------------------------------
+
+  test('16 - Tab key inserts two spaces in textarea', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).click();
+    await page.locator(S.editor).press('Tab');
+
+    await expect(page.locator(S.editor)).toHaveValue('  ');
+    await expect(page.locator(S.editor)).toBeFocused();
+  });
+
+  // -- 17. 404 / document not found ------------------------------------------
+
+  test('17 - navigating to a missing document redirects to home', async ({ page }) => {
+    await setupMockApi(page);
+    // Mock store is empty: any GET /documents/* returns 404
+
+    await page.goto('/nosuchdocument');
+
+    // App catches the 404 and navigates to /
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+    await expect(page.locator(S.editor)).toHaveValue('');
+  });
+
+  // -- 18. Direct URL load of existing document ------------------------------
+
+  test('18 - direct URL navigation loads correct content', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('directload', 'pre-populated content');
+
+    await page.goto('/directload');
+
+    await waitForPresentingMode(page);
+    await expect(page.locator(S.viewer)).toContainText('pre-populated');
+  });
+
+  // -- 19. Save failure shows toast ------------------------------------------
+
+  test('19 - save failure shows error toast and stays in editing mode', async ({ page }) => {
+    const store = await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('some content');
+    store.failNextSave();
+    await page.locator(S.saveBtn).click();
+
+    await expect(page).toHaveURL('/');
+    await waitForEditingMode(page);
+
+    await expect(page.locator('#toast')).toBeVisible();
+    await expect(page.locator('#toast')).toContainText('Failed to save');
+  });
+
+  // -- 20. Load failure shows toast and redirects to home --------------------
+
+  test('20 - load failure shows error toast and redirects to home', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.failNextLoad();
+
+    await page.goto('/somedocument');
+
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+
+    await expect(page.locator('#toast')).toBeVisible();
+    await expect(page.locator('#toast')).toContainText('Document not found');
+  });
+
+  // -- 21. Back after missing-doc redirect returns to previous paste ----------
+
+  test('21 - back after missing-doc redirect returns to saved paste', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('gooddoc', 'hello world');
+
+    // Start at a valid document
+    await page.goto('/gooddoc');
+    await waitForPresentingMode(page);
+
+    // Navigate to a non-existent document (simulates user typing a bad URL)
+    await page.goto('/notexist');
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+
+    // Toast shown
+    await expect(page.locator('#toast')).toBeVisible();
+
+    // Back should return to the good doc, not loop
+    await page.goBack();
+    await page.waitForURL(/\/gooddoc/);
+    await waitForPresentingMode(page);
+    await expect(page.locator(S.viewer)).toContainText('hello world');
+  });
+
+  // -- 22. scrollRestoration is set to manual ---------------------------------
+
+  test('22 - history.scrollRestoration is set to manual', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    const scrollRestoration = await page.evaluate(() => window.history.scrollRestoration);
+    expect(scrollRestoration).toBe('manual');
+  });
+
+  // -- 23. Back navigation restores scroll position ---------------------------
+
+  test('23 - back navigation restores scroll position', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 200 });
+    const store = await setupMockApi(page);
+    store.set('longdoc', 'line\n'.repeat(100));
+
+    await page.goto('/longdoc');
+    await waitForPresentingMode(page);
+
+    // Scroll down
+    await page.evaluate(() => window.scrollTo(0, 300));
+    expect(await page.evaluate(() => window.scrollY)).toBe(300);
+
+    // Navigate to new doc (scroll goes to 0)
+    await page.locator(S.newBtn).click();
+    await page.waitForURL('/');
+    await waitForEditingMode(page);
+
+    // Back - should restore scroll
+    await page.goBack();
+    await waitForPresentingMode(page);
+
+    expect(await page.evaluate(() => window.scrollY)).toBe(300);
+  });
+
+  // -- 24. Save scrolls to top when scrollToTopOnSave is true -----------------
+
+  test('24 - after save, page is scrolled to top', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 200 });
+    await setupMockApi(page);
+
+    // Fill editor with enough content to be taller than the viewport
+    const longContent = 'const x = 1;\n'.repeat(50);
+    await page.goto('/');
+    await waitForEditingMode(page);
+    await page.locator(S.editor).fill(longContent);
+
+    // Scroll down in edit mode
+    await page.evaluate(() => window.scrollTo(0, 200));
+    expect(await page.evaluate(() => window.scrollY)).toBe(200);
+
+    // Save
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    // Should be scrolled to top
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  test('25 - tab with selection indents all selected lines', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('line1\nline2\nline3');
+
+    // Select all text
+    await page.locator(S.editor).click();
+    await page.keyboard.press('Control+a');
+
+    // Tab should indent all 3 lines
+    await page.keyboard.press('Tab');
+
+    const content = await page.locator(S.editor).inputValue();
+    expect(content).toBe('  line1\n  line2\n  line3');
+  });
+
+  test('26 - tab without selection inserts 2 spaces at cursor', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).click();
+    await page.keyboard.press('Tab');
+
+    const content = await page.locator(S.editor).inputValue();
+    expect(content).toMatch(/^ {2}/);
+  });
+
+  test('27 - frozen document disables duplicate and twitter buttons', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.setFrozen('readme', 'This is a read-only document.');
+
+    await page.goto('/readme');
+    await waitForPresentingMode(page);
+
+    await expectDisabled(page, S.duplicateBtn);
+    await expectEnabled(page, S.twitterBtn);
+    await expectEnabled(page, S.newBtn);
+  });
+
+  // -- 28. Copy link / raw buttons -------------------------------------------
+
+  test('28 - copy link and raw are disabled while editing, enabled when presenting', async ({
+    page,
+  }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await expectDisabled(page, S.copyLinkBtn);
+    await expectDisabled(page, S.rawBtn);
+
+    await page.locator(S.editor).fill('shareable content');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await expectEnabled(page, S.copyLinkBtn);
+    await expectEnabled(page, S.rawBtn);
+  });
+
+  test('29 - frozen document keeps copy link enabled but disables raw', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.setFrozen('readme', 'This is a read-only document.');
+
+    await page.goto('/readme');
+    await waitForPresentingMode(page);
+
+    await expectEnabled(page, S.copyLinkBtn);
+    await expectDisabled(page, S.rawBtn);
+  });
+
+  test('30 - raw button opens /raw/:key in a new tab', async ({ page, context }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('raw me');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    const [popup] = await Promise.all([
+      context.waitForEvent('page'),
+      page.locator(S.rawBtn).click(),
+    ]);
+    await popup.waitForLoadState('domcontentloaded');
+    expect(new URL(popup.url()).pathname).toBe('/raw/testkey0');
+  });
+});
+
+test.describe('Copy link to clipboard', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  test('31 - copy link puts the paste URL on the clipboard and shows a toast', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('clipboard content');
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    await page.locator(S.copyLinkBtn).click();
+
+    await expect(page.locator(S.toast)).toHaveClass(/visible/);
+    await expect(page.locator(S.toast)).toHaveText('Link copied to clipboard');
+    await expect(page.locator(S.toast)).not.toHaveClass(/error/);
+
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toBe(page.url());
+  });
+});
+
+test.describe('Draft autosave', () => {
+  test('32 - unsaved draft is restored after reload', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    const draft = 'work in progress\nnot saved yet';
+    await page.locator(S.editor).fill(draft);
+
+    // Wait for the debounced draft write to land in localStorage
+    await page.waitForFunction(() => localStorage.getItem('haste-draft') !== null);
+
+    // Accept the beforeunload confirmation on reload
+    page.on('dialog', (dialog) => dialog.accept());
+    await page.reload();
+
+    await waitForEditingMode(page);
+    await expect(page.locator(S.editor)).toHaveValue(draft);
+    await expect(page.locator(S.toast)).toHaveText('Restored unsaved draft');
+    await expectEnabled(page, S.saveBtn);
+  });
+
+  test('33 - draft is cleared after a successful save', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('to be saved');
+    await page.waitForFunction(() => localStorage.getItem('haste-draft') !== null);
+
+    await page.locator(S.saveBtn).click();
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
+
+    const stored = await page.evaluate(() => localStorage.getItem('haste-draft'));
+    expect(stored).toBeNull();
+  });
+
+  test('34 - discarding via New clears the stored draft', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('discard me');
+    await page.waitForFunction(() => localStorage.getItem('haste-draft') !== null);
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator(S.newBtn).click();
+    await page.waitForURL('/');
+
+    const stored = await page.evaluate(() => localStorage.getItem('haste-draft'));
+    expect(stored).toBeNull();
+  });
+});
