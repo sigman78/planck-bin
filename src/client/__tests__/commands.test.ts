@@ -1,4 +1,4 @@
-import { availableCommands, type CommandContext } from '../commands';
+import { availableCommands, shortcutCommand, type CommandContext, type KeyLike } from '../commands';
 
 const base: CommandContext = {
   mode: 'presenting',
@@ -15,6 +15,7 @@ const ids = (ctx: Partial<CommandContext>) =>
 describe('availableCommands', () => {
   it('offers paste actions while presenting', () => {
     expect(ids({})).toEqual([
+      'save',
       'new',
       'duplicate',
       'copy-link',
@@ -31,10 +32,17 @@ describe('availableCommands', () => {
     ]);
   });
 
-  it('offers save only while editing with content', () => {
-    expect(ids({ mode: 'editing', canSave: false })).not.toContain('save');
-    expect(ids({ mode: 'editing', canSave: true })[0]).toBe('save');
-    expect(ids({ mode: 'presenting', canSave: true })).not.toContain('save');
+  it('always lists save, enabled only while editing with content', () => {
+    const save = (ctx: Partial<CommandContext>) =>
+      availableCommands({ ...base, ...ctx }).find((c) => c.id === 'save')!;
+    expect(save({ mode: 'editing', canSave: true }).disabled).toBe(false);
+    expect(save({ mode: 'editing', canSave: false }).disabled).toBe(true);
+    expect(save({ mode: 'presenting', canSave: true }).disabled).toBe(true);
+    expect(
+      availableCommands(base)
+        .filter((c) => c.disabled)
+        .map((c) => c.id)
+    ).toEqual(['save']);
   });
 
   it('hides presenting-only commands while editing', () => {
@@ -60,13 +68,27 @@ describe('availableCommands', () => {
     expect(ids({ enableTwitter: false })).not.toContain('twitter');
   });
 
-  it('uses Alt hints off Mac and Opt hints on Mac', () => {
-    const find = (isMac: boolean, id: string) =>
-      availableCommands({ ...base, isMac }).find((c) => c.id === id)!;
-    expect(find(false, 'new').hint).toBe('Alt+Shift+N');
-    expect(find(true, 'new').hint).toBe('Opt+Shift+N');
-    expect(find(false, 'zoom-in').hint).toBe('Ctrl+Alt+=');
-    expect(find(true, 'zoom-in').hint).toBe('Cmd+Opt+=');
+  it('hints Ctrl/Cmd+S for save and Alt/Opt+Shift keys for the rest', () => {
+    const hints = (isMac: boolean) =>
+      Object.fromEntries(availableCommands({ ...base, isMac }).map((c) => [c.id, c.hint]));
+    expect(hints(false).save).toBe('Ctrl+S');
+    expect(hints(true).save).toBe('Cmd+S');
+    expect(hints(false)).toMatchObject({
+      new: 'Alt+Shift+P',
+      duplicate: 'Alt+Shift+D',
+      'copy-link': 'Alt+Shift+C',
+      raw: 'Alt+Shift+R',
+      find: 'Alt+Shift+F',
+      'goto-line': 'Alt+Shift+G',
+      language: 'Alt+Shift+L',
+      recent: 'Alt+Shift+H',
+      'zoom-in': 'Alt+Shift+=',
+      'zoom-out': 'Alt+Shift+-',
+      'zoom-reset': 'Alt+Shift+0',
+      twitter: 'Alt+Shift+X',
+    });
+    expect(hints(true).duplicate).toBe('Opt+Shift+D');
+    expect(hints(false).about).toBeUndefined();
   });
 
   it('marks prefill and submenu commands', () => {
@@ -75,5 +97,53 @@ describe('availableCommands', () => {
     expect(all.find((c) => c.id === 'find')!.prefill).toBe('?');
     expect(all.find((c) => c.id === 'language')!.submenu).toBe(true);
     expect(all.find((c) => c.id === 'recent')!.submenu).toBe(true);
+  });
+});
+
+const key = (code: string, mods: Partial<KeyLike> = {}): KeyLike => ({
+  code,
+  altKey: false,
+  shiftKey: false,
+  ctrlKey: false,
+  metaKey: false,
+  ...mods,
+});
+const altShift = (code: string) => key(code, { altKey: true, shiftKey: true });
+
+describe('shortcutCommand', () => {
+  it('maps Alt/Opt+Shift keys to available commands on every platform', () => {
+    expect(shortcutCommand(altShift('KeyD'), base)).toBe('duplicate');
+    expect(shortcutCommand(altShift('KeyD'), { ...base, isMac: true })).toBe('duplicate');
+    expect(shortcutCommand(altShift('KeyP'), base)).toBe('new');
+    expect(shortcutCommand(altShift('Equal'), base)).toBe('zoom-in');
+    expect(shortcutCommand(altShift('KeyL'), base)).toBe('language');
+  });
+
+  it('leaves browser-claimed and unbound keys alone', () => {
+    for (const code of ['KeyN', 'KeyI', 'KeyA', 'KeyT', 'KeyQ']) {
+      expect(shortcutCommand(altShift(code), base)).toBeNull();
+    }
+    expect(shortcutCommand(key('KeyD', { altKey: true }), base)).toBeNull();
+    expect(
+      shortcutCommand(key('KeyD', { altKey: true, shiftKey: true, ctrlKey: true }), base)
+    ).toBeNull();
+  });
+
+  it('only claims a key while its command can run', () => {
+    const editing = { ...base, mode: 'editing' as const };
+    expect(shortcutCommand(altShift('KeyD'), editing)).toBeNull(); // duplicate: presenting only
+    expect(shortcutCommand(altShift('KeyR'), { ...base, frozen: true })).toBeNull();
+    expect(shortcutCommand(altShift('KeyP'), editing)).toBe('new');
+  });
+
+  it('saves with Ctrl+S / Ctrl+Enter, or Cmd on Mac', () => {
+    expect(shortcutCommand(key('KeyS', { ctrlKey: true }), base)).toBe('save');
+    expect(shortcutCommand(key('Enter', { ctrlKey: true }), base)).toBe('save');
+    expect(shortcutCommand(key('KeyS', { metaKey: true }), base)).toBeNull();
+    const mac = { ...base, isMac: true };
+    expect(shortcutCommand(key('KeyS', { metaKey: true }), mac)).toBe('save');
+    expect(shortcutCommand(key('NumpadEnter', { metaKey: true }), mac)).toBe('save');
+    expect(shortcutCommand(key('KeyS', { ctrlKey: true }), mac)).toBeNull();
+    expect(shortcutCommand(key('KeyL', { ctrlKey: true }), base)).toBeNull(); // address bar stays
   });
 });

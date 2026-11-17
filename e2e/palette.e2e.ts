@@ -113,12 +113,90 @@ test.describe('Command palette', () => {
     await start(page);
     await openPalette(page);
     await expect(paletteLabel(page, 'Copy link')).toHaveCount(0);
-    await expect(paletteLabel(page, 'Save')).toHaveCount(0);
+    await closePalette(page);
+  });
+
+  test('Save is always listed: greyed out last when it cannot run, first when it can', async ({
+    page,
+  }) => {
+    await start(page);
+    await openPalette(page);
+    const rows = page.locator(S.paletteRow);
+    const saveRow = rows.filter({ has: page.locator('span', { hasText: /^Save$/ }) });
+    await expect(saveRow).toHaveAttribute('aria-disabled', 'true');
+    await expect(rows.last()).toHaveAttribute('aria-disabled', 'true');
+    await expect(rows.first()).toHaveAttribute('aria-selected', 'true');
+    await expect(rows.first()).not.toHaveAttribute('aria-disabled', 'true');
+
+    // Keyboard selection never lands on it.
+    await page.keyboard.press('ArrowUp');
+    for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowDown');
+    await expect(saveRow).toHaveAttribute('aria-selected', 'false');
     await closePalette(page);
 
     await page.locator(S.editor).fill('content');
     await openPalette(page);
-    await expect(paletteLabel(page, 'Save')).toHaveCount(1);
+    await expect(rows.first()).toContainText('Save');
+    await expect(rows.first()).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(rows.first().locator('kbd')).toHaveText('Ctrl+S');
+  });
+
+  test('a disabled Save matched by a filter does nothing on Enter', async ({ page }) => {
+    await start(page);
+    await openPalette(page);
+    await page.locator(S.paletteInput).fill('save');
+    await page.keyboard.press('Enter');
+    await expect(page.locator(S.island)).toHaveClass(/open/);
+    await expect(page).toHaveURL('/');
+  });
+
+  test('command keys open the palette at find, go to line and a submenu', async ({ page }) => {
+    await start(page);
+    await savePaste(page, 'hello world');
+
+    await page.keyboard.press('Alt+Shift+F');
+    await expect(page.locator(S.island)).toHaveClass(/open/);
+    await expect(page.locator(S.paletteInput)).toHaveValue('?');
+    await closePalette(page);
+
+    await page.keyboard.press('Alt+Shift+G');
+    await expect(page.locator(S.paletteInput)).toHaveValue(':');
+    await closePalette(page);
+
+    await page.keyboard.press('Alt+Shift+L');
+    await expect(page.locator('#island .island-crumb')).toHaveText('Language');
+    await closePalette(page);
+
+    await page.keyboard.press('Alt+Shift+=');
+    await expect(page.locator(S.toast)).toHaveText('Font size 110%');
+  });
+
+  test('zoom commands flash a brief font-size toast', async ({ page }) => {
+    await start(page);
+    const toast = page.locator(S.toast);
+
+    await runCommand(page, 'Zoom in');
+    await expect(toast).toHaveText('Font size 110%');
+    await expect(toast).toHaveClass(/visible/);
+    await expect(toast).toHaveClass(/brief/);
+
+    await runCommand(page, 'Reset zoom');
+    await expect(toast).toHaveText('Font size 100%');
+    await expect(toast).not.toHaveClass(/visible/, { timeout: 2500 });
+  });
+
+  test('Save in the pill stays put when hovered', async ({ page }) => {
+    await start(page);
+    await page.locator(S.editor).fill('content');
+    const save = page.locator(S.saveBtn);
+    await expect(save).toBeEnabled();
+    await page.waitForTimeout(600);
+    const before = await save.boundingBox();
+
+    await save.hover();
+    await expect(page.locator('#island .island-kc')).toBeVisible();
+    await page.waitForTimeout(600);
+    expect(await save.boundingBox()).toEqual(before);
   });
 
   test('save chip is disabled when empty and enabled with content', async ({ page }) => {

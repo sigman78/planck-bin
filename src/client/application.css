@@ -92,6 +92,12 @@
     background: var(--color-toast-bg);
 }
 
+#toast.brief {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
 #toast.visible {
     opacity: 1;
 }

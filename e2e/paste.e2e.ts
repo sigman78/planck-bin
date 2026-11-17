@@ -337,27 +337,27 @@ test.describe('Paste lifecycle', () => {
     await waitForPresentingMode(page);
   });
 
-  // -- 14. Keyboard shortcut: Alt+Shift+N for new ----------------------------
+  // -- 14. Keyboard shortcut: Ctrl+Enter saves; Alt+Shift+N is left to Chrome --
 
-  test('14 - Alt+Shift+N from presenting creates new document', async ({ page }) => {
+  test('14 - Ctrl+Enter saves; Alt+Shift+N (Chrome split view) is not bound', async ({ page }) => {
     await setupMockApi(page);
     await page.goto('/');
     await waitForEditingMode(page);
 
-    await page.locator(S.editor).fill('content');
-    await page.locator(S.saveBtn).click();
+    await page.locator(S.editor).fill('enter test');
+    await page.locator(S.editor).press('Control+Enter');
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
+    // Chrome claims Alt+Shift+N (split view); New is Alt+Shift+P.
     await page.keyboard.press('Alt+Shift+N');
-    await page.waitForURL('/');
-    await waitForEditingMode(page);
-    await expect(page.locator(S.editor)).toHaveValue('');
+    await page.waitForTimeout(300);
+    await expect(page).toHaveURL(/\/testkey0/);
   });
 
-  // -- 15. Keyboard shortcut: Alt+Shift+D for duplicate ----------------------
+  // -- 14b. Alt+Shift command keys --------------------------------------------
 
-  test('15 - Alt+Shift+D from presenting duplicates to editor', async ({ page }) => {
+  test('14b - Alt+Shift+D duplicates and Alt+Shift+P starts a new paste', async ({ page }) => {
     await setupMockApi(page);
     await page.goto('/');
     await waitForEditingMode(page);
@@ -369,8 +369,54 @@ test.describe('Paste lifecycle', () => {
 
     await page.keyboard.press('Alt+Shift+D');
     await waitForEditingMode(page);
-    await expect(page).toHaveURL(/\/testkey0/); // no /edit suffix
     await expect(page.locator(S.editor)).toHaveValue('to be forked');
+
+    // The duplicated text counts as unsaved, so New asks first.
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator(S.editor).press('Alt+Shift+P');
+    await page.waitForURL('/');
+    await expect(page.locator(S.editor)).toHaveValue('');
+  });
+
+  test('14c - an unavailable command key types through in the editor', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    // Duplicate is presenting-only, so Alt+Shift+D must not be swallowed here.
+    const prevented = await page.locator(S.editor).evaluate((el) => {
+      const evt = new KeyboardEvent('keydown', {
+        code: 'KeyD',
+        key: 'D',
+        altKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      el.dispatchEvent(evt);
+      return evt.defaultPrevented;
+    });
+    expect(prevented).toBe(false);
+  });
+
+  // -- 15. Keyboard shortcut: Cmd+S on Mac -----------------------------------
+
+  test('15 - on Mac, Cmd+S saves and Ctrl+S does not', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' });
+    });
+    await setupMockApi(page);
+    await page.goto('/');
+    await waitForEditingMode(page);
+
+    await page.locator(S.editor).fill('mac test');
+    await page.locator(S.editor).press('Control+s');
+    await page.waitForTimeout(300);
+    await expect(page).toHaveURL('/');
+
+    await page.locator(S.editor).press('Meta+s');
+    await page.waitForURL(/\/testkey0/);
+    await waitForPresentingMode(page);
   });
 
   // -- 16. Tab key inserts spaces in textarea --------------------------------

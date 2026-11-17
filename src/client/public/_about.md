@@ -7,10 +7,11 @@ Haste is the prettiest, easiest to use pastebin ever made.
 
 ## Basic Usage
 
-Type what you want to share, press **Ctrl+Enter** to save, and then copy the URL. Send that URL
+Type what you want to share, press **Ctrl+Enter** (**Cmd+Enter** on Mac) to save, and then copy the URL. Send that URL
 to someone and they'll see exactly what you see.
 
-To make a new entry, open the command palette and pick "New paste" (or press **Alt+Shift+N**).
+To make a new entry, press **Alt+Shift+P** (**Opt+Shift+P** on Mac) or pick "New paste" in the
+command palette.
 
 ## Command Palette
 
@@ -24,13 +25,21 @@ press Enter.
 
 ## Keyboard Shortcuts
 
-- **Ctrl+/** - Open the command palette
-- **Ctrl+Enter** (or Ctrl+S) - Save your paste
-- **Alt+Shift+N** - Create new paste
-- **Alt+Shift+D** - Duplicate and edit
-- **Alt+Shift+C** - Copy paste link to clipboard
-- **Alt+Shift+R** - Open raw view in a new tab
-- **Alt+Shift+X** - Share on Twitter
+- **Ctrl+/** - Open the command palette (also on Mac)
+- **Ctrl+S** or **Ctrl+Enter** - Save your paste (**Cmd+S** / **Cmd+Enter** on Mac)
+
+The rest use **Alt+Shift** on Windows and Linux, **Opt+Shift** on Mac:
+
+- **P** - New paste
+- **D** - Duplicate and edit
+- **C** - Copy paste link to clipboard
+- **R** - Open raw view in a new tab
+- **F** - Find in paste
+- **G** - Go to line
+- **L** - Switch language
+- **H** - Recent pastes
+- **=** / **-** / **0** - Zoom in / out / reset
+- **X** - Share on Twitter
 
 ## Drafts
 

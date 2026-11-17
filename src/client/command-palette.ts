@@ -14,6 +14,7 @@ import {
   type CommandContext,
   type PaletteItem,
   type ViewMode,
+  shortcutCommand,
 } from './commands';
 import { parseQuery, rankItems } from './palette-search';
 import type { FindStatus } from './viewer-find';
@@ -105,7 +106,13 @@ export class CommandPalette {
         if (isPaletteShortcut(evt)) {
           evt.preventDefault();
           this.toggle();
+          return;
         }
+        const id = shortcutCommand(evt, this.host.context());
+        if (id === null) return;
+        evt.preventDefault();
+        if (evt.repeat && !id.startsWith('zoom')) return;
+        this.runShortcut(id);
       },
       true
     );
@@ -115,12 +122,28 @@ export class CommandPalette {
 
     this.list.addEventListener('mousemove', (evt) => {
       const index = this.rowIndexOf(evt.target);
-      if (index !== -1 && index !== this.selected) this.select(index);
+      if (index !== -1 && index !== this.selected && !this.rows[index]?.disabled)
+        this.select(index);
     });
     this.list.addEventListener('click', (evt) => {
       const index = this.rowIndexOf(evt.target);
       if (index !== -1) this.activate(index, { shiftKey: evt.shiftKey });
     });
+  }
+
+  /** Run a command from its key: prefix and submenu commands open the palette there. */
+  private runShortcut(id: string): void {
+    const cmd = availableCommands(this.host.context()).find((c) => c.id === id);
+    if (cmd?.submenu) {
+      this.open();
+      this.setMenu(id);
+    } else if (cmd?.prefill !== undefined) {
+      this.open();
+      this.setInput(cmd.prefill);
+    } else {
+      this.close(false);
+      this.host.run(id);
+    }
   }
 
   isOpen(): boolean {
@@ -337,9 +360,14 @@ export class CommandPalette {
       ];
     }
 
-    const rows: Row[] = rankItems(availableCommands(ctx), query.text, itemTexts).map((cmd) => ({
+    let commands = rankItems(availableCommands(ctx), query.text, itemTexts);
+    // Unfiltered, list what can run first; greyed-out commands follow.
+    if (query.text === '')
+      commands = [...commands.filter((c) => !c.disabled), ...commands.filter((c) => c.disabled)];
+    const rows: Row[] = commands.map((cmd) => ({
       label: cmd.label,
       hint: cmd.hint,
+      disabled: cmd.disabled,
       action: () => {
         if (cmd.submenu) {
           this.setMenu(cmd.id);
@@ -372,6 +400,7 @@ export class CommandPalette {
   private render(): void {
     this.rows = this.buildRows();
     if (this.selected >= this.rows.length) this.selected = Math.max(this.rows.length - 1, 0);
+    if (this.rows[this.selected]?.disabled) this.selected = this.nearestEnabled(this.selected, 1);
 
     const inMenu = this.menu !== null;
     this.crumb.hidden = !inMenu;
@@ -425,9 +454,20 @@ export class CommandPalette {
     }
   }
 
-  private move(delta: number): void {
+  private move(delta: 1 | -1): void {
     if (this.rows.length === 0) return;
-    this.select(Math.min(Math.max(this.selected + delta, 0), this.rows.length - 1));
+    const next = this.nearestEnabled(this.selected + delta, delta);
+    if (!this.rows[next]?.disabled) this.select(next);
+  }
+
+  /** First enabled row from `start` in `direction`; `start` (clamped) if there is none. */
+  private nearestEnabled(start: number, direction: 1 | -1): number {
+    const last = this.rows.length - 1;
+    const from = Math.min(Math.max(start, 0), last);
+    for (let i = from; i >= 0 && i <= last; i += direction) {
+      if (!this.rows[i].disabled) return i;
+    }
+    return from;
   }
 
   private activate(index: number, evt: { shiftKey: boolean }): void {

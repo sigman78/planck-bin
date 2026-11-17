@@ -74,20 +74,29 @@ It also switches the highlighting language and lists recent pastes kept in this 
 
 ## Shortcuts
 
-| Action     | Shortcut            |
-| ---------- | ------------------- |
-| Palette    | Ctrl+/              |
-| Save       | Ctrl+Enter / Ctrl+S |
-| New        | Alt+Shift+N         |
-| Duplicate  | Alt+Shift+D         |
-| Copy link  | Alt+Shift+C         |
-| View raw   | Alt+Shift+R         |
-| Share on X | Alt+Shift+X         |
+| Action            | Windows / Linux     | Mac                 |
+| ----------------- | ------------------- | ------------------- |
+| Command palette   | Ctrl+/              | Ctrl+/              |
+| Save              | Ctrl+S / Ctrl+Enter | Cmd+S / Cmd+Enter   |
+| New paste         | Alt+Shift+P         | Opt+Shift+P         |
+| Duplicate & edit  | Alt+Shift+D         | Opt+Shift+D         |
+| Copy link         | Alt+Shift+C         | Opt+Shift+C         |
+| View raw          | Alt+Shift+R         | Opt+Shift+R         |
+| Find in paste     | Alt+Shift+F         | Opt+Shift+F         |
+| Go to line        | Alt+Shift+G         | Opt+Shift+G         |
+| Switch language   | Alt+Shift+L         | Opt+Shift+L         |
+| Recent pastes     | Alt+Shift+H         | Opt+Shift+H         |
+| Zoom in/out/reset | Alt+Shift+= / - / 0 | Opt+Shift+= / - / 0 |
+| Share on X        | Alt+Shift+X         | Opt+Shift+X         |
+
+Alt+Shift (Opt+Shift on Mac) is the same physical chord everywhere and is left alone by
+browsers, except Chrome's Alt+Shift+I/A/N/T, which are not used. Keys match the physical key,
+so they work on any layout, and a key only does something while its command is available.
 
 ## Niceties
 
 - **Draft autosave** — unsaved text is kept in localStorage and restored on your next visit
-- **Copy link** — one click (or Alt+Shift+C) copies the paste URL to the clipboard
+- **Copy link** — Alt+Shift+C (or the palette) copies the paste URL to the clipboard
 - **Raw view** — open the plain-text version of any paste in a new tab
 - **Nightly cleanup** — a cron trigger purges expired pastes automatically
 

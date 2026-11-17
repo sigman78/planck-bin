@@ -104,12 +104,6 @@ export class AppController {
 
     // Wire up view callbacks
     this.view.setCallbacks({
-      onSave: () => this.handleSave(),
-      onNew: () => this.handleNew(),
-      onDuplicate: () => this.handleDuplicate(),
-      onCopyLink: () => this.handleCopyLink(),
-      onRaw: () => this.handleRaw(),
-      onTwitter: () => this.handleTwitter(),
       onContentInput: (content) => this.handleContentInput(content),
       onFileDrop: (content) => this.handleFileDrop(content),
     });
@@ -347,6 +341,13 @@ export class AppController {
   }
 
   /** Dispatch a command palette command id. */
+  /** Zoom the editor and flash the new font size. */
+  private zoom(direction: 1 | -1 | 'reset'): void {
+    const { level, atLimit } = this.view.zoom(direction);
+    const percent = `${Math.round(level * 100)}%`;
+    this.notify.toast(`Font size ${percent}${atLimit ? ' (limit)' : ''}`, 'info', { brief: true });
+  }
+
   private runCommand(id: string): void {
     switch (id) {
       case 'save':
@@ -362,11 +363,11 @@ export class AppController {
       case 'twitter':
         return this.handleTwitter();
       case 'zoom-in':
-        return this.view.zoom(1);
+        return this.zoom(1);
       case 'zoom-out':
-        return this.view.zoom(-1);
+        return this.zoom(-1);
       case 'zoom-reset':
-        return this.view.zoom('reset');
+        return this.zoom('reset');
       case 'about':
         return this.openPath('/about.md');
     }

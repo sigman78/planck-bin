@@ -8,20 +8,30 @@
 export type ToastKind = 'info' | 'error';
 
 const TOAST_DURATION_MS = 4000;
+const BRIEF_DURATION_MS = 1200;
+
+export interface ToastOptions {
+  /** Compact, short-lived status (e.g. the zoom level). */
+  brief?: boolean;
+}
 
 export class Notifications {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  toast(message: string, kind: ToastKind = 'info'): void {
+  toast(message: string, kind: ToastKind = 'info', options: ToastOptions = {}): void {
     const toast = document.getElementById('toast')!;
     toast.textContent = message;
     toast.classList.toggle('error', kind === 'error');
+    toast.classList.toggle('brief', options.brief === true);
     toast.classList.add('visible');
     if (this.toastTimer !== null) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => {
-      toast.classList.remove('visible');
-      this.toastTimer = null;
-    }, TOAST_DURATION_MS);
+    this.toastTimer = setTimeout(
+      () => {
+        toast.classList.remove('visible');
+        this.toastTimer = null;
+      },
+      options.brief ? BRIEF_DURATION_MS : TOAST_DURATION_MS
+    );
   }
 
   progressStart(): void {

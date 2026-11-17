@@ -16,12 +16,6 @@ import { ViewerFind, type FindStatus } from './viewer-find';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
-  onSave: () => void;
-  onNew: () => void;
-  onDuplicate: () => void;
-  onCopyLink: () => void;
-  onRaw: () => void;
-  onTwitter: () => void;
   onContentInput: (content: string) => void;
   onFileDrop: (content: string) => void;
 }
@@ -86,7 +80,6 @@ export class ViewManager {
    * Initialize event listeners
    */
   init(): void {
-    this.setupKeyboardShortcuts();
     this.setupEditorHandlers();
     this.setupLineHighlightListeners();
     this.initZoom();
@@ -206,70 +199,6 @@ export class ViewManager {
     }
   }
 
-  /**
-   * Setup keyboard shortcuts
-   */
-  private setupKeyboardShortcuts(): void {
-    document.body.addEventListener('keydown', (evt) => {
-      const ctrlHot = evt.ctrlKey && !evt.altKey && !evt.shiftKey;
-      const altShift = evt.altKey && evt.shiftKey;
-      const fontHot = evt.altKey && (this.isMac ? evt.metaKey : evt.ctrlKey);
-
-      if (ctrlHot) {
-        switch (evt.key.toLowerCase()) {
-          case 's':
-          case 'l':
-          case 'enter':
-            evt.preventDefault();
-            this.callbacks?.onSave();
-            break;
-        }
-      }
-
-      if (altShift) {
-        switch (evt.key.toLowerCase()) {
-          case 'n':
-            evt.preventDefault();
-            this.callbacks?.onNew();
-            break;
-          case 'd':
-            evt.preventDefault();
-            this.callbacks?.onDuplicate();
-            break;
-          case 'c':
-            evt.preventDefault();
-            this.callbacks?.onCopyLink();
-            break;
-          case 'r':
-            evt.preventDefault();
-            this.callbacks?.onRaw();
-            break;
-          case 'x':
-            evt.preventDefault();
-            this.callbacks?.onTwitter();
-            break;
-        }
-      }
-
-      if (fontHot) {
-        switch (evt.code) {
-          case 'Equal':
-            evt.preventDefault();
-            this.adjustZoom(+this.ZOOM_STEP);
-            break;
-          case 'Minus':
-            evt.preventDefault();
-            this.adjustZoom(-this.ZOOM_STEP);
-            break;
-          case 'Digit0':
-            evt.preventDefault();
-            this.zoom('reset');
-            break;
-        }
-      }
-    });
-  }
-
   private initZoom(): void {
     const stored = sessionStorage.getItem(this.ZOOM_KEY);
     if (stored !== null) {
@@ -294,14 +223,19 @@ export class ViewManager {
     this.finder.clear();
   }
 
-  /** Zoom the editor by one step in either direction, or reset it. */
-  zoom(direction: 1 | -1 | 'reset'): void {
+  /**
+   * Zoom the editor by one step in either direction, or reset it.
+   * Returns the new level and whether it is pinned at a limit.
+   */
+  zoom(direction: 1 | -1 | 'reset'): { level: number; atLimit: boolean } {
     if (direction === 'reset') {
       this.editorZoom = 1;
       this.applyZoom();
     } else {
       this.adjustZoom(direction * this.ZOOM_STEP);
     }
+    const atLimit = this.editorZoom <= this.ZOOM_MIN || this.editorZoom >= this.ZOOM_MAX;
+    return { level: this.editorZoom, atLimit };
   }
 
   /**

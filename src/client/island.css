@@ -87,6 +87,7 @@
     height: 30px;
     padding: 0 8px;
     white-space: nowrap;
+    cursor: pointer; /* the whole folded pill opens the palette */
     transition:
         opacity 0.16s ease,
         filter 0.25s ease;
