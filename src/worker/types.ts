@@ -1,14 +1,13 @@
-export interface DocumentRecord {
-  id: string;
+/** A stored document; timestamps are unix seconds. */
+export interface StoredDocument {
   content: string;
-  created_at: number;
-  expires_at: number | null;
-  views: number;
+  createdAt: number;
+  expiresAt: number | null;
 }
 
 export interface DocumentStore {
-  /** Fetch document content, or null if missing/expired. */
-  get(key: string): Promise<string | null>;
+  /** Fetch a document, or null if missing/expired. */
+  get(key: string): Promise<StoredDocument | null>;
   /** Atomically insert content under a fresh unique key and return that key. */
   create(content: string, keyOptions: KeyOptions, expireDays?: number): Promise<string>;
   /** Bump the view counter (best-effort, safe to run in the background). */
@@ -32,8 +31,7 @@ export interface Env {
   DEFAULT_EXPIRE_DAYS: string;
   KEY_STRATEGY?: string;
   BROWSER_CACHE_MAX_AGE?: string;
-  CDN_CACHE_MAX_AGE?: string;
-  CDN_STALE_WHILE_REVALIDATE?: string;
+  SERVER_RENDER?: string;
   CREATE_RATE_LIMITER: RateLimit;
   READ_RATE_LIMITER: RateLimit;
 }

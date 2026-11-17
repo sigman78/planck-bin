@@ -225,11 +225,11 @@ async function testTooLargeDocument() {
       body: tooLargeContent,
     });
 
-    if (response.status === 400) {
-      pass('Correctly rejects oversized content (400)');
+    if (response.status === 413) {
+      pass('Correctly rejects oversized content (413)');
       return true;
     } else {
-      fail(`Expected 400 for oversized content, got ${response.status}`);
+      fail(`Expected 413 for oversized content, got ${response.status}`);
       return false;
     }
   } catch (error) {

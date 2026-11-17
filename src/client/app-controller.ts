@@ -15,6 +15,7 @@ import { TransitionManager } from './transition-manager';
 import appConfig from './config';
 import { buildPath, parsePath, type ParsedPath } from './path-utils';
 import { getExtensionForLanguage, highlightContent, listLanguages } from './highlight-config';
+import { hasEmbeddedDocument } from './embedded-document';
 import type { PaletteItem } from './commands';
 import { DocumentSession } from './document-session';
 import { NavigationState, type HistoryState } from './navigation-state';
@@ -240,7 +241,8 @@ export class AppController {
     // Guard: can't load while loading/saving
     if (this.isBusy) return;
 
-    const hideWhileLoading = this.isFirstLoad;
+    // A server-rendered page already shows the text: don't blank it while "loading".
+    const hideWhileLoading = this.isFirstLoad && !hasEmbeddedDocument(path.key);
     this.isFirstLoad = false;
     this.activity = 'loading';
     if (hideWhileLoading) {

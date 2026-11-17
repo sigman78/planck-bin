@@ -36,10 +36,10 @@ export class DocumentSession {
   async load(path: ParsedPath): Promise<DocumentRenderResult> {
     const urlLanguage = path.ext ? resolveLanguage(path.ext) : undefined;
     const result = await this.storage.load(path.key);
-    const highlightResult = highlightContent(result.content, urlLanguage ?? result.language);
-    // An explicit plain-text extension ('' language) wins over server hints.
+    // The URL extension is the only language source; without one, auto-detect.
+    const highlightResult = highlightContent(result.content, urlLanguage);
     const plain = urlLanguage === '';
-    const language = plain ? undefined : highlightResult.language || urlLanguage || result.language;
+    const language = plain ? undefined : highlightResult.language || urlLanguage;
 
     return {
       paste: {

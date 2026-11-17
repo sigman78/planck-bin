@@ -5,95 +5,71 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from './types';
-import type { GetResponse, SaveResponse } from '../shared/types';
+import type { SaveResponse } from '../shared/types';
 import { createStore } from './storage';
-import { getServerConfig, type ServerConfig } from './config';
+import { getServerConfig } from './config';
+import { loadDocument, toGetResponse, type LoadedDocument } from './documents';
+import { etagMatches, isJsonContentType } from './http';
 
 type AppContext = Context<{ Bindings: Env }>;
 
 export const api = new Hono<{ Bindings: Env }>();
 
-// Markdown pages served from static assets but presented as read-only pastes
-const PUBLIC_MD_PAGES: Record<string, string> = {
-  about: '/_about.md',
-};
+/**
+ * Pastes never change, so the ETag is stable and the browser may keep a copy,
+ * but never past the paste's expiry. No `immutable`: a removed paste must be
+ * able to disappear on the next revalidation.
+ */
+function applyDocumentCacheHeaders(c: AppContext, doc: LoadedDocument): void {
+  c.header('ETag', doc.etag);
 
-function applyDocumentCacheHeaders(c: AppContext, config: ServerConfig): void {
   const isLocalDev = !c.req.raw.cf;
-  if (isLocalDev) return;
-
-  if (config.browserCacheMaxAge > 0) {
-    c.header('Cache-Control', `public, max-age=${config.browserCacheMaxAge}, immutable`);
+  let maxAge = isLocalDev ? 0 : getServerConfig(c.env).browserCacheMaxAge;
+  if (doc.expiresAt !== null) {
+    maxAge = Math.min(maxAge, Math.max(0, doc.expiresAt - Math.floor(Date.now() / 1000)));
   }
-  if (config.cdnCacheMaxAge > 0) {
-    const value =
-      config.cdnStaleWhileRevalidate > 0
-        ? `public, max-age=${config.cdnCacheMaxAge}, stale-while-revalidate=${config.cdnStaleWhileRevalidate}`
-        : `public, max-age=${config.cdnCacheMaxAge}`;
-    c.header('Cloudflare-CDN-Cache-Control', value);
-  }
+  c.header('Cache-Control', maxAge > 0 ? `public, max-age=${maxAge}` : 'no-cache');
 }
 
-function countViewInBackground(c: AppContext, key: string): void {
-  const store = createStore(c.env);
-  c.executionCtx.waitUntil(
-    store.incrementViews(key).catch((err) => console.error('View count update failed:', err))
-  );
-}
-
-// Get document by key
-api.get('/documents/:id', async (c) => {
-  const key = c.req.param('id');
-  const config = getServerConfig(c.env);
-
-  // Handle "special" pastes
-  if (Object.hasOwn(PUBLIC_MD_PAGES, key)) {
-    try {
-      const pageUrl = new URL(c.req.url);
-      pageUrl.pathname = PUBLIC_MD_PAGES[key];
-      const pageResponse = await c.env.ASSETS.fetch(
-        new Request(pageUrl.toString(), { method: 'GET' })
-      );
-
-      if (pageResponse.ok) {
-        const content = await pageResponse.text();
-        const response: GetResponse = {
-          content,
-          key,
-          frozen: true,
-        };
-        applyDocumentCacheHeaders(c, config);
-        return c.json(response);
-      }
-    } catch (error) {
-      console.error('Error loading public file:', error);
-    }
-    return c.json({ message: 'Document not found' }, 404);
-  }
-
-  const store = createStore(c.env);
-
+/** Shared GET flow: load, 404, cache headers, 304, else `send`. */
+async function serveDocument(
+  c: AppContext,
+  send: (doc: LoadedDocument) => Response,
+  notFound: () => Response,
+  failed: () => Response
+): Promise<Response> {
   try {
-    const content = await store.get(key);
+    const doc = await loadDocument(c, c.req.param('id') ?? '');
+    if (!doc) return notFound();
 
-    if (content === null) {
-      return c.json({ message: 'Document not found' }, 404);
-    }
-
-    countViewInBackground(c, key);
-
-    const response: GetResponse = {
-      content,
-      key,
-    };
-
-    applyDocumentCacheHeaders(c, config);
-    return c.json(response);
+    applyDocumentCacheHeaders(c, doc);
+    if (etagMatches(c.req.header('if-none-match'), doc.etag)) return c.body(null, 304);
+    return send(doc);
   } catch (error) {
     console.error('Error retrieving document:', error);
-    return c.json({ message: 'Error retrieving document' }, 500);
+    return failed();
   }
-});
+}
+
+// Get document by key (JSON)
+api.get('/documents/:id', (c) =>
+  serveDocument(
+    c,
+    (doc) => c.json(toGetResponse(doc)),
+    () => c.json({ message: 'Document not found' }, 404),
+    () => c.json({ message: 'Error retrieving document' }, 500)
+  )
+);
+
+// Raw document (for copy/download); built-in pages are served too
+api.get('/raw/:id', (c) =>
+  serveDocument(
+    c,
+    (doc) => c.text(doc.content, 200, { 'Content-Type': 'text/plain; charset=utf-8' }),
+    () => c.text('Document not found', 404),
+    () => c.text('Error retrieving document', 500)
+  )
+);
 
 // Create new document
 api.post('/documents', async (c) => {
@@ -101,10 +77,9 @@ api.post('/documents', async (c) => {
   const config = getServerConfig(c.env);
 
   try {
-    const contentType = c.req.header('content-type') || '';
     let content: string;
 
-    if (contentType.includes('application/json')) {
+    if (isJsonContentType(c.req.header('content-type'))) {
       let body: unknown;
       try {
         body = await c.req.json<unknown>();
@@ -133,7 +108,7 @@ api.post('/documents', async (c) => {
     if (contentBytes > config.maxPasteSize) {
       return c.json(
         { message: `Document exceeds maximum size of ${config.maxPasteSize} bytes` },
-        400
+        413
       );
     }
 
@@ -142,10 +117,7 @@ api.post('/documents', async (c) => {
       length: config.keyLength,
     });
 
-    const response: SaveResponse = {
-      key,
-    };
-
+    const response: SaveResponse = { key };
     return c.json(response, 201);
   } catch (error) {
     console.error('Error saving document:', error);
@@ -153,26 +125,15 @@ api.post('/documents', async (c) => {
   }
 });
 
-// Raw document endpoint (for copy/download)
-api.get('/raw/:id', async (c) => {
-  const key = c.req.param('id');
-  const store = createStore(c.env);
+// Anything else on the document routes: 405 with the methods that do exist.
+// Registered last, so the handlers above win for their methods (GET also serves HEAD).
+function methodNotAllowed(allow: string) {
+  return (c: AppContext) => {
+    c.header('Allow', allow);
+    return c.json({ message: 'Method not allowed' }, 405);
+  };
+}
 
-  try {
-    const content = await store.get(key);
-
-    if (content === null) {
-      return c.text('Document not found', 404);
-    }
-
-    countViewInBackground(c, key);
-
-    applyDocumentCacheHeaders(c, getServerConfig(c.env));
-    return c.text(content, 200, {
-      'Content-Type': 'text/plain; charset=utf-8',
-    });
-  } catch (error) {
-    console.error('Error retrieving raw document:', error);
-    return c.text('Error retrieving document', 500);
-  }
-});
+api.all('/documents', methodNotAllowed('POST'));
+api.all('/documents/:id', methodNotAllowed('GET, HEAD'));
+api.all('/raw/:id', methodNotAllowed('GET, HEAD'));

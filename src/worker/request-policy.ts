@@ -1,6 +1,7 @@
 import type { Hono, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { getServerConfig } from './config';
+import { isJsonContentType } from './http';
 import type { Env } from './types';
 
 type App = { Bindings: Env };
@@ -91,7 +92,7 @@ const enforceRequestPolicy: MiddlewareHandler<App> = async (c, next) => {
     // bytes (for example, "\u0000"). The route enforces the exact decoded byte
     // limit after parsing; this guard prevents unbounded buffering beforehand.
     const maxPasteSize = getServerConfig(c.env).maxPasteSize;
-    const isJson = (c.req.header('content-type') || '').toLowerCase().includes('application/json');
+    const isJson = isJsonContentType(c.req.header('content-type'));
     return bodyLimit({
       maxSize: isJson ? maxPasteSize * JSON_ENCODING_EXPANSION + JSON_ENVELOPE_BYTES : maxPasteSize,
       onError: (context) => context.json({ message: 'Request body is too large' }, 413),
@@ -105,6 +106,21 @@ const enforceRequestPolicy: MiddlewareHandler<App> = async (c, next) => {
 
   await next();
 };
+
+/**
+ * Read-limit check for routes outside /documents and /raw that still read a
+ * document (the server-rendered paste page). False when limited or when the
+ * limiter fails; the caller then falls back to the plain page.
+ */
+export async function isReadAllowed(c: Parameters<MiddlewareHandler<App>>[0]): Promise<boolean> {
+  try {
+    const { success } = await c.env.READ_RATE_LIMITER.limit({ key: rateLimitKey(c.req.raw) });
+    return success;
+  } catch (error) {
+    console.error('Rate limit check failed:', error);
+    return false;
+  }
+}
 
 /** Install the complete HTTP boundary policy in one place. */
 export function installRequestPolicy(app: Hono<App>): void {

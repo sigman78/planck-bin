@@ -3,6 +3,8 @@ import type { Env } from './types';
 import { api } from './api';
 import { createStore } from './storage';
 import { installRequestPolicy } from './request-policy';
+import { createPageHandler } from './pages';
+import appConfig from '../../haste.config';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -16,28 +18,9 @@ app.get('/health', (c) => {
 // Document API: /documents, /documents/:id, /raw/:id
 app.route('/', api);
 
-// Serve static assets from Vite build
-app.get('*', async (c) => {
-  const url = new URL(c.req.url);
-  const path = url.pathname;
-
-  // If path looks like a document key (e.g., /abc123 or /abc123.js or /abc123.js/fork),
-  // serve index.html to let the SPA handle routing
-  const isDocumentRoute = path.match(/^\/[\w-]+(\.[\w]+)?([\/\w\.-])*$/);
-  // Actually existing resources should be served as default w/o worker so this is redundant
-  const isAssetRoute = path.startsWith('/assets/');
-
-  if (isDocumentRoute && !isAssetRoute) {
-    // Rewrite to index.html for SPA routing
-    // Create a clean GET request to avoid issues with ASSETS binding
-    const indexUrl = new URL(c.req.url);
-    indexUrl.pathname = '/index.html';
-    return c.env.ASSETS.fetch(new Request(indexUrl.toString(), { method: 'GET' }));
-  }
-
-  // Forward all other requests to the static assets
-  return c.env.ASSETS.fetch(c.req.raw);
-});
+// Pages: the SPA shell, server-rendered for paste URLs when SERVER_RENDER is on.
+// Files that exist in the build are served by the assets layer before the worker runs.
+app.get('*', createPageHandler({ appName: appConfig.appName }));
 
 export default {
   fetch: app.fetch,

@@ -9,11 +9,11 @@
  */
 
 import type { GetResponse, SaveResponse } from '../shared/types';
+import { takeEmbeddedDocument } from './embedded-document';
 
 export interface LoadResult {
   content: string;
   key: string;
-  language?: string;
   frozen?: boolean;
 }
 
@@ -52,6 +52,18 @@ export class StorageService {
       return cached;
     }
 
+    // A server-rendered page already carries its document.
+    const data = takeEmbeddedDocument(key) ?? (await this.fetchDocument(key));
+    const doc: LoadResult = {
+      content: data.content,
+      key: data.key,
+      frozen: data.frozen,
+    };
+    this.remember(doc);
+    return doc;
+  }
+
+  private async fetchDocument(key: string): Promise<GetResponse> {
     const response = await fetch(`/documents/${key}`);
 
     if (!response.ok) {
@@ -61,16 +73,7 @@ export class StorageService {
       throw new Error(`Failed to load document: ${response.statusText}`);
     }
 
-    const data: GetResponse = await response.json();
-
-    const doc: LoadResult = {
-      content: data.content,
-      key: data.key,
-      language: data.language,
-      frozen: data.frozen,
-    };
-    this.remember(doc);
-    return doc;
+    return response.json();
   }
 
   /**

@@ -1,4 +1,4 @@
-import type { DocumentStore, Env, KeyOptions, KeyStrategy } from './types';
+import type { DocumentStore, Env, KeyOptions, KeyStrategy, StoredDocument } from './types';
 import { getServerConfig } from './config';
 
 const CONSONANTS = 'bcdfghjklmnpqrstvwxyz';
@@ -48,18 +48,20 @@ export class D1DocumentStore implements DocumentStore {
     private defaultExpireDays: number = 30
   ) {}
 
-  async get(key: string): Promise<string | null> {
+  async get(key: string): Promise<StoredDocument | null> {
     const now = Math.floor(Date.now() / 1000);
 
-    const result = await this.db
+    const row = await this.db
       .prepare(
-        `SELECT content FROM documents
+        `SELECT content, created_at, expires_at FROM documents
          WHERE id = ? AND (expires_at IS NULL OR expires_at > ?)`
       )
       .bind(key, now)
-      .first<{ content: string }>();
+      .first<{ content: string; created_at: number; expires_at: number | null }>();
 
-    return result?.content ?? null;
+    return row
+      ? { content: row.content, createdAt: row.created_at, expiresAt: row.expires_at }
+      : null;
   }
 
   async incrementViews(key: string): Promise<void> {

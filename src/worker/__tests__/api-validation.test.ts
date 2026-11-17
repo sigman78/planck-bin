@@ -53,7 +53,7 @@ describe('document API validation', () => {
       env
     );
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(413);
     await expect(response.json()).resolves.toEqual({
       message: 'Document exceeds maximum size of 4 bytes',
     });

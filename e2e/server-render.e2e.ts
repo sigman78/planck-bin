@@ -1,0 +1,99 @@
+import { test, expect, type Page } from '@playwright/test';
+import { setupMockApi } from './helpers/mock-api';
+import { S } from './helpers/selectors';
+import { expectCommand } from './helpers/palette';
+import { renderDocumentPage } from '../src/worker/render';
+import type { GetResponse } from '../src/shared/types';
+
+/**
+ * The client half of SERVER_RENDER. The dev server has no worker, so the
+ * navigation is answered with the dev shell passed through the worker's own
+ * renderer, exactly what the worker sends in production.
+ */
+async function serveRendered(page: Page, path: string, doc: GetResponse) {
+  await page.route(`**${path}`, async (route) => {
+    if (route.request().resourceType() !== 'document') return route.continue();
+    const shell = await (
+      await route.fetch({ url: new URL('/', route.request().url()).href })
+    ).text();
+    const html = renderDocumentPage(shell, { appName: 'Haste', displayName: path.slice(1), doc });
+    expect(html, 'dev shell lost a render anchor').not.toBeNull();
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html! });
+  });
+}
+
+/** Count /documents GETs and whether the viewer was ever blanked for loading. */
+async function watch(page: Page) {
+  const fetches: string[] = [];
+  page.on('request', (req) => {
+    if (/\/documents\//.test(req.url()) && req.method() === 'GET') fetches.push(req.url());
+  });
+  await page.addInitScript(() => {
+    const w = window as unknown as { __blanked: boolean };
+    w.__blanked = false;
+    new MutationObserver(() => {
+      if (document.getElementById('viewer')?.classList.contains('is-loading')) w.__blanked = true;
+    }).observe(document, { attributes: true, subtree: true, attributeFilter: ['class'] });
+  });
+  return {
+    fetches,
+    blanked: () => page.evaluate(() => (window as unknown as { __blanked: boolean }).__blanked),
+  };
+}
+
+const HOSTILE = 'const s = "</script><b>x</b>";\nconst t = "$&" + `$\'`;\n';
+
+test.describe('Server-rendered paste page', () => {
+  test('shows the embedded paste, highlighted, without fetching it', async ({ page }) => {
+    await setupMockApi(page);
+    const seen = await watch(page);
+    await serveRendered(page, '/tavelu-hasoq.js', { key: 'tavelu-hasoq', content: HOSTILE });
+
+    await page.goto('/tavelu-hasoq.js');
+    await expect(page.locator(S.island)).toHaveAttribute('data-mode', 'presenting');
+    await expect(page.locator(`${S.viewer} code .hljs-keyword`).first()).toHaveText('const');
+    await expect(page.locator(`${S.viewer} code`)).toHaveText(HOSTILE);
+    await expect(page.locator(`${S.viewer} b`)).toHaveCount(0);
+
+    expect(seen.fetches).toEqual([]);
+    expect(await seen.blanked()).toBe(false);
+    expect(page.url()).toMatch(/\/tavelu-hasoq\.js$/);
+    await expect(page).toHaveTitle('Haste - tavelu-hasoq');
+  });
+
+  test('the URL extension still picks the language', async ({ page }) => {
+    await setupMockApi(page);
+    await serveRendered(page, '/tavelu-hasoq.txt', { key: 'tavelu-hasoq', content: HOSTILE });
+
+    await page.goto('/tavelu-hasoq.txt');
+    await expect(page.locator(`${S.viewer} code`)).toHaveText(HOSTILE);
+    await expect(page.locator(`${S.viewer} code .hljs-keyword`)).toHaveCount(0);
+  });
+
+  test('a later navigation fetches as usual', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('other', 'second paste');
+    const seen = await watch(page);
+    await serveRendered(page, '/tavelu-hasoq.js', { key: 'tavelu-hasoq', content: 'first paste' });
+
+    await page.goto('/tavelu-hasoq.js');
+    await expect(page.locator(`${S.viewer} code`)).toHaveText('first paste');
+    await page.evaluate(() => {
+      history.pushState(null, '', '/other');
+      dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.locator(`${S.viewer} code`)).toHaveText('second paste');
+    expect(seen.fetches.map((u) => new URL(u).pathname)).toEqual(['/documents/other']);
+  });
+
+  test('the about page stays frozen: no duplicate, not recorded', async ({ page }) => {
+    await setupMockApi(page);
+    await serveRendered(page, '/about.md', { key: 'about', content: '# About\n', frozen: true });
+
+    await page.goto('/about.md');
+    await expect(page.locator(`${S.viewer} code`)).toContainText('# About');
+    await expectCommand(page, 'Duplicate & edit', false);
+    const recents = await page.evaluate(() => JSON.stringify(localStorage));
+    expect(recents).not.toContain('about');
+  });
+});

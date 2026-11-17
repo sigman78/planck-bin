@@ -10,14 +10,21 @@ export interface ServerConfig {
   keyStrategy: KeyStrategy;
   defaultExpireDays: number;
   browserCacheMaxAge: number;
-  cdnCacheMaxAge: number;
-  cdnStaleWhileRevalidate: number;
+  /** Render paste pages on the worker (content embedded in the HTML). */
+  serverRender: boolean;
 }
 
 function keyStrategyVar(value: string | undefined): KeyStrategy {
   return value === 'random' || value === 'uuid' || value === 'pronounceable'
     ? value
     : 'pronounceable';
+}
+
+function boolVar(value: string | undefined, fallback: boolean): boolean {
+  const v = (value ?? '').trim().toLowerCase();
+  if (v === 'true' || v === '1' || v === 'on') return true;
+  if (v === 'false' || v === '0' || v === 'off') return false;
+  return fallback;
 }
 
 function intVar(value: string | undefined, fallback: number): number {
@@ -32,7 +39,6 @@ export function getServerConfig(env: Env): ServerConfig {
     keyStrategy: keyStrategyVar(env.KEY_STRATEGY),
     defaultExpireDays: intVar(env.DEFAULT_EXPIRE_DAYS, 30),
     browserCacheMaxAge: intVar(env.BROWSER_CACHE_MAX_AGE, 0),
-    cdnCacheMaxAge: intVar(env.CDN_CACHE_MAX_AGE, 0),
-    cdnStaleWhileRevalidate: intVar(env.CDN_STALE_WHILE_REVALIDATE, 0),
+    serverRender: boolVar(env.SERVER_RENDER, false),
   };
 }
