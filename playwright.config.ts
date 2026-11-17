@@ -27,7 +27,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npx vite',
+    command: 'pnpm exec vite',
     url: 'http://localhost:5173',
     reuseExistingServer: false,
     timeout: 30_000,

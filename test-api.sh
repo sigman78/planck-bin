@@ -45,10 +45,10 @@ check_server() {
         echo -e "${GREEN}✓${NC} Server is running at $BASE_URL"
         return 0
     else
-        echo -e "${RED}✗${NC} Server is not running. Start it with: npm run dev"
+        echo -e "${RED}✗${NC} Server is not running. Start it with: pnpm dev"
         echo ""
         echo "Run this in another terminal:"
-        echo "  npm run dev"
+        echo "  pnpm dev"
         echo ""
         exit 1
     fi
@@ -114,7 +114,7 @@ echo ""
 echo "Test 5: Verify in Database"
 echo "------------------------------"
 echo "Querying local D1 database..."
-db_query=$(npx wrangler d1 execute haste-db --local --command "SELECT id, LENGTH(content) as content_length, created_at FROM documents WHERE id='$key'" 2>/dev/null | grep -A 20 "results")
+db_query=$(pnpm exec wrangler d1 execute haste-db --local --command "SELECT id, LENGTH(content) as content_length, created_at FROM documents WHERE id='$key'" 2>/dev/null | grep -A 20 "results")
 
 if echo "$db_query" | grep -q "$key"; then
     echo -e "${GREEN}✓${NC} Document found in database!"
@@ -149,7 +149,7 @@ echo ""
 
 echo "Test 7: Verify All Documents in Database"
 echo "------------------------------"
-db_count=$(npx wrangler d1 execute haste-db --local --command "SELECT COUNT(*) as count FROM documents" 2>/dev/null | grep -o '"count":[0-9]*' | cut -d':' -f2)
+db_count=$(pnpm exec wrangler d1 execute haste-db --local --command "SELECT COUNT(*) as count FROM documents" 2>/dev/null | grep -o '"count":[0-9]*' | cut -d':' -f2)
 echo "Total documents in database: $db_count"
 if [ "$db_count" -ge 4 ]; then
     echo -e "${GREEN}✓${NC} All documents persisted to database"
@@ -191,7 +191,7 @@ echo "------------------------------"
 # Get document twice and check if view count increases
 first_view=$(curl -s "$BASE_URL/documents/$key" > /dev/null)
 second_view=$(curl -s "$BASE_URL/documents/$key" > /dev/null)
-view_count=$(npx wrangler d1 execute haste-db --local --command "SELECT views FROM documents WHERE id='$key'" 2>/dev/null | grep -o '"views":[0-9]*' | cut -d':' -f2)
+view_count=$(pnpm exec wrangler d1 execute haste-db --local --command "SELECT views FROM documents WHERE id='$key'" 2>/dev/null | grep -o '"views":[0-9]*' | cut -d':' -f2)
 if [ "$view_count" -ge 2 ]; then
     echo -e "${GREEN}✓${NC} View count incremented correctly (views: $view_count)"
     ((TESTS_PASSED++))

@@ -16,4 +16,5 @@ dist/
 # TypeScript
 *.tsbuildinfo
 test-results
+package-lock.json
 .superpowers/

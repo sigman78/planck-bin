@@ -21,17 +21,17 @@ Rewritten in TypeScript with Vite, no jQuery.
 ## Quick start
 
 ```bash
-npm install
-npm run db:migrate:local
-npm run dev          # http://localhost:8787
+pnpm install
+pnpm db:migrate:local
+pnpm dev          # http://localhost:8787
 ```
 
 ## Deploy
 
 ```bash
-npx wrangler d1 create haste-db   # copy the database_id into wrangler.toml
-npm run db:migrate:remote
-npm run deploy
+pnpm exec wrangler d1 create haste-db   # copy the database_id into wrangler.toml
+pnpm db:migrate:remote
+pnpm run deploy   # "pnpm deploy" is a built-in pnpm command
 ```
 
 Your instance will be live at `https://haste.YOUR-SUBDOMAIN.workers.dev`.
@@ -94,9 +94,9 @@ It also switches the highlighting language and lists recent pastes kept in this 
 ## Tests
 
 ```bash
-npm test          # unit tests (jest)
-npm run test:e2e  # browser tests (playwright)
-npm run test:api  # API integration tests (needs `npm run dev` running)
+pnpm test          # unit tests (jest)
+pnpm test:e2e      # browser tests (playwright)
+pnpm test:api      # API integration tests (needs `pnpm dev` running)
 ```
 
 ## License
