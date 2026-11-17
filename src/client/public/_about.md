@@ -10,10 +10,21 @@ Haste is the prettiest, easiest to use pastebin ever made.
 Type what you want to share, press **Ctrl+Enter** to save, and then copy the URL. Send that URL
 to someone and they'll see exactly what you see.
 
-To make a new entry, click "New" (or press **Alt+Shift+N**)
+To make a new entry, open the command palette and pick "New paste" (or press **Alt+Shift+N**).
+
+## Command Palette
+
+Press **Ctrl+/** or click the pill in the top-right corner. Type to filter commands, then
+press Enter.
+
+- **:42** - go to line 42
+- **/text** - find text in the paste (Enter / Shift+Enter for next / previous)
+- **Switch language** - change syntax highlighting
+- **Recent pastes** - pastes you saved or opened in this browser (stored only locally)
 
 ## Keyboard Shortcuts
 
+- **Ctrl+/** - Open the command palette
 - **Ctrl+Enter** (or Ctrl+S) - Save your paste
 - **Alt+Shift+N** - Create new paste
 - **Alt+Shift+D** - Duplicate and edit

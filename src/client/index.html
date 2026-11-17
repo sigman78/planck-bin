@@ -8,6 +8,7 @@
 		<link rel="stylesheet" type="text/css" href="./solarized_dark.css" />
 		<link rel="stylesheet" type="text/css" href="./application.css" />
 		<link rel="stylesheet" type="text/css" href="./view-transitions.css" />
+		<link rel="stylesheet" type="text/css" href="./island.css" />
 
 		<link rel="icon" href="./favicon.ico" />
 
@@ -19,24 +20,27 @@
 	<body>
 		<div id="progress-bar"></div>
 		<div id="toast" aria-live="assertive" aria-atomic="true"></div>
-		<header id="key" class="no-print">
-			<div id="pointer" style="display: none;" aria-hidden="true"></div>
-			<div id="box1">
-				<a href="/about.md" class="logo" aria-label="About hastebin"></a>
+		<div id="island" class="no-print" data-stage="learn" data-mode="editing">
+			<div class="island-hint">
+				<button type="button" class="island-save island-slide" disabled aria-hidden="true">Save</button>
+				<button type="button" class="island-trigger" aria-label="Commands (Ctrl+/)" aria-haspopup="listbox" aria-expanded="false">
+					<span class="island-text island-slide">commands</span>
+					<kbd class="island-kc island-slide">Ctrl /</kbd>
+					<svg class="island-mark" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M5.6 1.2 L2.4 14.8" />
+						<path d="M3.5 10.2 C4.9 7.6 7.2 6.6 9 7.2 C10.4 7.7 10.3 8.9 9.9 10.4 L8.9 14.8" />
+						<path d="M1.8 5.2 L7.6 3.4" />
+					</svg>
+				</button>
 			</div>
-			<nav id="box2">
-				<div class="save function" aria-label="Save Paste" type="button"></div>
-				<div class="new function" aria-label="New Paste" type="button"></div>
-				<div class="duplicate function" aria-label="Duplicate Paste" type="button"></div>
-				<div class="copylink function" aria-label="Copy Link" type="button"></div>
-				<div class="raw function" aria-label="View Raw" type="button"></div>
-				<div class="twitter function" aria-label="Post to twitter" type="button"></div>
-			</nav>
-			<div id="box3" style="display: none;" aria-hidden="true">
-				<div class="label"></div>
-				<div class="shortcut"></div>
+			<div class="island-panel">
+				<div class="island-search">
+					<span class="island-crumb" hidden></span>
+					<input class="island-input" type="text" role="combobox" aria-label="Command" aria-controls="island-list" aria-expanded="false" aria-autocomplete="list" autocomplete="off" spellcheck="false" />
+				</div>
+				<div id="island-list" class="island-list" role="listbox" aria-label="Commands"></div>
 			</div>
-		</header>
+		</div>
 
 		<div id="editor-container">
 			<div id="gutter" aria-hidden="true"></div>

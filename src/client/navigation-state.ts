@@ -27,12 +27,13 @@ export class NavigationState {
 
   pushPath(path: string, state?: HistoryState): void {
     window.history.pushState(state ?? null, '', path);
-    this.lastPathname = path;
+    this.lastPathname = window.location.pathname;
   }
 
+  /** Replace the current entry; `path` may carry a #hash. */
   replacePath(path: string, state?: HistoryState): void {
     window.history.replaceState(state ?? null, '', path);
-    this.lastPathname = path;
+    this.lastPathname = window.location.pathname;
   }
 
   replaceDraft(path: string, content: string, scrollY: number): void {

@@ -12,12 +12,8 @@
  * This file now simply initializes the application with the new architecture.
  */
 
-import { initializeIcons } from './icons';
 import { AppController } from './app-controller';
 import appConfig from './config';
-
-// Initialize vector icons first
-initializeIcons();
 
 // Create and initialize the app controller
 const app = new AppController(appConfig);

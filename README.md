@@ -59,10 +59,24 @@ curl https://your-worker.dev/documents/KEY
 curl https://your-worker.dev/raw/KEY
 ```
 
+## Command palette
+
+Press **Ctrl+/** (or click the h-bar pill in the top-right corner) to open the command
+palette. Type to filter commands, then press Enter.
+
+| Query   | Does                                                |
+| ------- | --------------------------------------------------- |
+| `save`  | Fuzzy-filter commands (save, new, copy link, ...)   |
+| `:42`   | Go to line 42                                       |
+| `/text` | Find text in the paste; Enter / Shift+Enter to step |
+
+It also switches the highlighting language and lists recent pastes kept in this browser.
+
 ## Shortcuts
 
 | Action     | Shortcut            |
 | ---------- | ------------------- |
+| Palette    | Ctrl+/              |
 | Save       | Ctrl+Enter / Ctrl+S |
 | New        | Alt+Shift+N         |
 | Duplicate  | Alt+Shift+D         |

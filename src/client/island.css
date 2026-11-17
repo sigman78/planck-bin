@@ -1,0 +1,320 @@
+/*
+ * Island - folded pill that morphs into the command palette.
+ * Folded content is right-anchored and grows to the left.
+ */
+
+#island {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 1000;
+    height: 30px;
+    border-radius: 15px;
+    overflow: hidden;
+    background: var(--color-island-bg);
+    color: var(--color-editor-text);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    line-height: 1.4;
+    box-shadow: 0 0 0 1px var(--color-island-edge);
+    transition:
+        width 0.5s var(--island-spring),
+        height 0.5s var(--island-spring),
+        border-radius 0.5s var(--island-spring),
+        background-color 0.3s ease,
+        box-shadow 0.3s ease,
+        opacity 0.3s ease;
+}
+
+#island:not(.open):hover {
+    background: var(--color-island-bg-hover);
+}
+
+#island[data-mode='presenting'][data-stage='known']:not(.open):not(:hover):not(:focus-within) {
+    opacity: 0.55;
+}
+
+#island[data-stage='first']:not(.open) {
+    animation: island-pulse 2.4s ease-out 0.4s 2;
+}
+
+@keyframes island-pulse {
+    0% {
+        box-shadow:
+            0 0 0 1px var(--color-island-edge),
+            0 0 0 0 var(--color-island-pulse);
+    }
+    70%,
+    100% {
+        box-shadow:
+            0 0 0 1px var(--color-island-edge),
+            0 0 0 10px transparent;
+    }
+}
+
+#island.open {
+    border-radius: 14px;
+    background: var(--color-island-panel);
+    box-shadow:
+        0 12px 36px rgba(0, 0, 0, 0.6),
+        0 0 0 1px var(--color-island-edge);
+}
+
+/* --- folded content ------------------------------------------------------- */
+
+.island-hint {
+    display: flex;
+    align-items: center;
+    width: max-content;
+    margin-left: auto;
+    box-sizing: border-box;
+    height: 30px;
+    padding: 0 8px;
+    white-space: nowrap;
+    transition:
+        opacity 0.16s ease,
+        filter 0.25s ease;
+}
+
+#island.open .island-hint {
+    opacity: 0;
+    filter: blur(4px);
+    pointer-events: none;
+}
+
+.island-hint button {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.island-trigger:focus-visible,
+.island-save:focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 10px;
+}
+
+/* Elements that slide out to the left; collapsed by default. */
+.island-slide {
+    overflow: hidden;
+    max-width: 0;
+    opacity: 0;
+    margin-right: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    transition:
+        max-width 0.45s var(--island-spring),
+        opacity 0.22s ease,
+        margin 0.45s var(--island-spring),
+        padding 0.45s var(--island-spring);
+}
+
+.island-hint .island-save {
+    border-radius: 10px;
+    background: var(--color-accent);
+    color: var(--color-text-bright);
+    font-weight: bold;
+    font-size: 11px;
+}
+
+.island-hint .island-save:not(:disabled) {
+    max-width: 60px;
+    opacity: 1;
+    margin-right: 6px;
+    padding: 2px 9px;
+}
+
+.island-hint .island-save:disabled {
+    cursor: default;
+    pointer-events: none;
+}
+
+.island-text {
+    color: var(--color-editor-text);
+}
+
+.island-kc {
+    font-family: var(--font-editor);
+    font-size: 11px;
+    color: var(--color-icon);
+    background: var(--color-island-chip);
+    border-radius: 10px;
+}
+
+#island[data-stage='first'] .island-text {
+    max-width: 120px;
+    opacity: 1;
+    margin-right: 8px;
+}
+
+#island[data-stage='first'] .island-kc,
+#island[data-stage='learn'] .island-kc,
+#island:not(.open):hover .island-kc,
+#island:not(.open):focus-within .island-kc {
+    max-width: 60px;
+    opacity: 1;
+    margin-right: 7px;
+    padding: 3px 8px;
+}
+
+.island-mark {
+    display: block;
+    flex: none;
+    width: 14px;
+    height: 16px;
+    color: var(--color-icon);
+    transition: color 0.2s ease;
+}
+
+#island:hover .island-mark,
+#island[data-stage='first'] .island-mark,
+#island[data-stage='learn'] .island-mark {
+    color: var(--color-logo);
+}
+
+/* --- touch: no keycap, the label carries the hint instead ----------------- */
+
+@media (hover: none) {
+    #island .island-kc {
+        max-width: 0;
+        opacity: 0;
+        margin-right: 0;
+        padding: 0;
+    }
+
+    #island[data-stage='learn'] .island-text {
+        max-width: 120px;
+        opacity: 1;
+        margin-right: 8px;
+    }
+}
+
+/* --- palette panel -------------------------------------------------------- */
+
+.island-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(320px, calc(100vw - 24px));
+    opacity: 0;
+    transform: scale(0.97) translateY(-6px);
+    transform-origin: top right;
+    transition:
+        opacity 0.14s ease,
+        transform 0.3s var(--island-spring);
+}
+
+#island.open .island-panel {
+    opacity: 1;
+    transform: none;
+    transition-delay: 0.1s;
+}
+
+.island-search {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--color-island-edge);
+}
+
+.island-crumb {
+    flex: none;
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 9px;
+    background: var(--color-island-row-selected);
+    color: var(--color-logo);
+    font-size: 11px;
+}
+
+.island-crumb[hidden] {
+    display: none;
+}
+
+.island-input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--color-logo);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    caret-color: var(--color-accent);
+}
+
+.island-input::placeholder {
+    color: var(--color-placeholder);
+}
+
+.island-list {
+    max-height: 208px; /* 8 rows */
+    overflow-y: auto;
+    padding: 4px 0;
+    scrollbar-width: thin;
+}
+
+.island-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 5px 14px;
+    line-height: 16px;
+    white-space: nowrap;
+    color: var(--color-editor-text);
+    cursor: pointer;
+}
+
+.island-row > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.island-row[aria-selected='true'] {
+    background: var(--color-island-row-selected);
+    color: var(--color-logo);
+}
+
+.island-row[aria-disabled='true'] {
+    color: var(--color-placeholder);
+    cursor: default;
+}
+
+.island-row kbd {
+    flex: none;
+    font-family: var(--font-editor);
+    font-size: 11px;
+    color: var(--color-placeholder);
+}
+
+.island-empty {
+    padding: 8px 14px;
+    color: var(--color-placeholder);
+}
+
+/* --- motion --------------------------------------------------------------- */
+
+/* Keep the island out of the root page wipe; it morphs on its own. */
+#island {
+    view-transition-name: island;
+}
+
+::view-transition-group(island) {
+    animation-duration: 0.3s;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #island,
+    #island * {
+        transition-duration: 0.01ms !important;
+        animation: none !important;
+    }
+}

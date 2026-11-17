@@ -12,6 +12,7 @@
  */
 
 import type { Paste } from './paste';
+import { ViewerFind, type FindStatus } from './viewer-find';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
@@ -27,9 +28,12 @@ export interface ViewCallbacks {
 
 export interface RenderOptions {
   appName: string;
-  enableTwitter: boolean;
   lineNumbers: boolean;
   highlightCurrentLine: boolean;
+}
+
+export function isMacPlatform(): boolean {
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform) || navigator.userAgent.includes('Mac');
 }
 
 export class ViewManager {
@@ -40,8 +44,7 @@ export class ViewManager {
   private appName: string;
   private lineNumbers: boolean;
   private callbacks?: ViewCallbacks;
-  private readonly isMac: boolean =
-    /Mac|iPhone|iPad|iPod/.test(navigator.platform) || navigator.userAgent.includes('Mac');
+  private readonly isMac: boolean = isMacPlatform();
   private readonly ZOOM_KEY = 'editor-zoom';
   private readonly ZOOM_STEP = 0.1;
   private readonly ZOOM_MIN = 0.5;
@@ -51,6 +54,7 @@ export class ViewManager {
   private highlightCurrentLine: boolean;
   private currentLine: number = 0;
   private dragCounter: number = 0;
+  private finder: ViewerFind;
 
   constructor(options: RenderOptions) {
     this.appName = options.appName;
@@ -58,14 +62,7 @@ export class ViewManager {
     this.viewer = document.getElementById('viewer') as HTMLPreElement;
     this.viewerCode = this.viewer.querySelector('code') as HTMLElement;
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
-
-    // Hide twitter button if disabled
-    if (!options.enableTwitter) {
-      const twitterBtn = document.querySelector('#box2 .twitter') as HTMLElement;
-      if (twitterBtn) {
-        twitterBtn.style.display = 'none';
-      }
-    }
+    this.finder = new ViewerFind(this.viewerCode, this.viewer);
 
     this.lineNumbers = options.lineNumbers;
     if (!this.lineNumbers) {
@@ -89,7 +86,6 @@ export class ViewManager {
    * Initialize event listeners
    */
   init(): void {
-    this.setupButtons();
     this.setupKeyboardShortcuts();
     this.setupEditorHandlers();
     this.setupLineHighlightListeners();
@@ -155,6 +151,7 @@ export class ViewManager {
    * Render full state including editor (for loading/reset)
    */
   renderFullState(state: Paste, mode: 'editing' | 'presenting', highlightedContent?: string): void {
+    this.finder.clear();
     this.editor.classList.remove('is-loading');
     this.viewer.classList.remove('is-loading');
 
@@ -179,7 +176,7 @@ export class ViewManager {
       this.updateGutter(lineCount, false);
       this.updateLineHighlight();
     }
-    this.renderUIState(state, mode);
+    this.renderUIState(state);
   }
 
   renderLoadingState(): void {
@@ -194,8 +191,7 @@ export class ViewManager {
   /**
    * Render metadata only (during editing - don't touch textarea)
    */
-  renderUIState(state: Paste, mode: 'editing' | 'presenting'): void {
-    this.updateButtons(state, mode);
+  renderUIState(state: Paste): void {
     this.updateTitle(state);
   }
 
@@ -208,101 +204,6 @@ export class ViewManager {
     } else {
       document.title = this.appName;
     }
-  }
-
-  /**
-   * Update button states based on document state
-   */
-  private updateButtons(state: Paste, mode: 'editing' | 'presenting'): void {
-    const presenting = mode === 'presenting';
-    const editing = mode === 'editing';
-
-    const updateBtn = (el: Element | null, isEnabled: boolean) =>
-      el?.classList.toggle('enabled', isEnabled);
-
-    updateBtn(document.querySelector('#box2 .new'), true);
-    updateBtn(document.querySelector('#box2 .save'), editing && state.content.trim() !== '');
-    updateBtn(document.querySelector('#box2 .duplicate'), presenting && !state.frozen);
-    updateBtn(document.querySelector('#box2 .copylink'), presenting);
-    updateBtn(document.querySelector('#box2 .raw'), presenting && !state.frozen);
-    updateBtn(document.querySelector('#box2 .twitter'), presenting);
-  }
-
-  /**
-   * Setup button event listeners
-   */
-  private setupButtons(): void {
-    const box3 = document.getElementById('box3')!;
-    const pointer = document.getElementById('pointer')!;
-    const labelEl = document.querySelector('#box3 .label') as HTMLElement;
-    const shortcutEl = document.querySelector('#box3 .shortcut') as HTMLElement;
-
-    const alt = this.isMac ? 'opt' : 'alt';
-    const buttons = [
-      {
-        selector: '.save',
-        action: () => this.callbacks?.onSave(),
-        label: 'Save',
-        shortcut: 'ctrl + enter',
-      },
-      {
-        selector: '.new',
-        action: () => this.callbacks?.onNew(),
-        label: 'New',
-        shortcut: `${alt} + shift + n`,
-      },
-      {
-        selector: '.duplicate',
-        action: () => this.callbacks?.onDuplicate(),
-        label: 'Duplicate & Edit',
-        shortcut: `${alt} + shift + d`,
-      },
-      {
-        selector: '.copylink',
-        action: () => this.callbacks?.onCopyLink(),
-        label: 'Copy Link',
-        shortcut: `${alt} + shift + c`,
-      },
-      {
-        selector: '.raw',
-        action: () => this.callbacks?.onRaw(),
-        label: 'View Raw',
-        shortcut: `${alt} + shift + r`,
-      },
-      {
-        selector: '.twitter',
-        action: () => this.callbacks?.onTwitter(),
-        label: 'Twitter',
-        shortcut: `${alt} + shift + x`,
-      },
-    ];
-
-    buttons.forEach(({ selector, action, label, shortcut }) => {
-      const element = document.querySelector(`#box2 ${selector}`) as HTMLElement;
-      if (!element) return;
-
-      // Click handler
-      element.addEventListener('click', (evt) => {
-        evt.preventDefault();
-        if (element.classList.contains('enabled')) {
-          action();
-        }
-      });
-
-      // Hover handlers for tooltip
-      element.addEventListener('mouseenter', () => {
-        labelEl.textContent = label;
-        shortcutEl.textContent = shortcut;
-        box3.style.display = 'block';
-        element.appendChild(pointer);
-        pointer.style.display = 'block';
-      });
-
-      element.addEventListener('mouseleave', () => {
-        box3.style.display = 'none';
-        pointer.style.display = 'none';
-      });
-    });
   }
 
   /**
@@ -362,8 +263,7 @@ export class ViewManager {
             break;
           case 'Digit0':
             evt.preventDefault();
-            this.editorZoom = 1;
-            this.applyZoom();
+            this.zoom('reset');
             break;
         }
       }
@@ -383,6 +283,58 @@ export class ViewManager {
     container.style.setProperty('--editor-zoom', String(this.editorZoom));
     sessionStorage.setItem(this.ZOOM_KEY, String(this.editorZoom));
     this.updateLineHighlight();
+  }
+
+  /** Find in the viewer: step 0 starts a new search, 1/-1 move between matches. */
+  find(text: string, step: 0 | 1 | -1): FindStatus {
+    return step === 0 ? this.finder.search(text) : this.finder.step(step);
+  }
+
+  clearFind(): void {
+    this.finder.clear();
+  }
+
+  /** Zoom the editor by one step in either direction, or reset it. */
+  zoom(direction: 1 | -1 | 'reset'): void {
+    if (direction === 'reset') {
+      this.editorZoom = 1;
+      this.applyZoom();
+    } else {
+      this.adjustZoom(direction * this.ZOOM_STEP);
+    }
+  }
+
+  /**
+   * Move to a 1-based line (clamped). Presenting: set the #L anchor and
+   * highlight it. Editing: place the caret at the start of the line.
+   */
+  goToLine(line: number): void {
+    const presenting = this.viewer.style.display !== 'none';
+    const content = presenting ? (this.viewerCode.textContent ?? '') : this.editor.value;
+    const lineCount = (content.match(/\n/g) ?? []).length + 1;
+    const target = Math.min(Math.max(1, line), lineCount);
+
+    if (presenting) {
+      history.replaceState(history.state, '', `#L${target}`);
+      this.highlightAnchorLine();
+    } else {
+      let pos = 0;
+      for (let i = 1; i < target; i++) pos = content.indexOf('\n', pos) + 1;
+      this.editor.focus({ preventScroll: true });
+      this.editor.setSelectionRange(pos, pos);
+      this.updateLineHighlight();
+    }
+    this.scrollToLine(target);
+  }
+
+  /** Scroll the page so the given 1-based line sits mid-viewport. */
+  private scrollToLine(line: number): void {
+    const container = document.getElementById('editor-container')!;
+    const lineHeight = parseFloat(getComputedStyle(container).lineHeight) || 20;
+    const lineTop =
+      container.getBoundingClientRect().top + window.scrollY + (line - 1) * lineHeight;
+    const top = lineTop - window.innerHeight / 2 + lineHeight / 2;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
   }
 
   private adjustZoom(delta: number): void {
@@ -423,11 +375,13 @@ export class ViewManager {
   private updateLineHighlight(): void {
     if (!this.highlightCurrentLine || !this.lineHighlight) return;
 
-    const isEditing = this.editor.style.display !== 'none';
+    // Presenting mode: the #L anchor owns the highlight (highlightAnchorLine).
+    if (this.editor.style.display === 'none') return;
+
     const hasFocus = document.activeElement === this.editor;
     const hasSelection = this.editor.selectionStart !== this.editor.selectionEnd;
 
-    if (!isEditing || !hasFocus || hasSelection) {
+    if (!hasFocus || hasSelection) {
       this.lineHighlight.classList.remove('visible');
       this.currentLine = 0;
       return;
@@ -515,7 +469,7 @@ export class ViewManager {
     });
 
     this.editor.addEventListener('blur', () => {
-      this.resetLineHighlight();
+      if (this.editor.style.display !== 'none') this.resetLineHighlight();
     });
 
     window.addEventListener('hashchange', () => {

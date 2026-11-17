@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { setupMockApi } from './helpers/mock-api';
 import { S } from './helpers/selectors';
+import { runCommand, expectCommand } from './helpers/palette';
 
 // --- helpers -----------------------------------------------------------------
 
@@ -14,14 +15,14 @@ async function waitForPresentingMode(page: Page) {
   await expect(page.locator(S.viewer)).toBeVisible();
 }
 
-/** Check that a button element has the `enabled` CSS class. */
+/** Check that a button is enabled. */
 async function expectEnabled(page: Page, selector: string) {
-  await expect(page.locator(selector)).toHaveClass(/enabled/);
+  await expect(page.locator(selector)).toBeEnabled();
 }
 
-/** Check that a button element does NOT have the `enabled` CSS class. */
+/** Check that a button is disabled. */
 async function expectDisabled(page: Page, selector: string) {
-  await expect(page.locator(selector)).not.toHaveClass(/enabled/);
+  await expect(page.locator(selector)).toBeDisabled();
 }
 
 // --- Suite -------------------------------------------------------------------
@@ -36,9 +37,9 @@ test.describe('Paste lifecycle', () => {
     await waitForEditingMode(page);
     await expect(page.locator(S.editor)).toHaveValue('');
 
-    await expectEnabled(page, S.newBtn);
+    await expectCommand(page, 'New paste', true);
     await expectDisabled(page, S.saveBtn);
-    await expectDisabled(page, S.duplicateBtn);
+    await expectCommand(page, 'Duplicate & edit', false);
 
     await expect(page).toHaveTitle('Haste');
   });
@@ -78,7 +79,7 @@ test.describe('Paste lifecycle', () => {
     await expect(page.locator(S.viewer)).toContainText('hello');
     await expect(page.locator(S.viewer)).toContainText('world');
 
-    await expectEnabled(page, S.duplicateBtn);
+    await expectCommand(page, 'Duplicate & edit', true);
     await expectDisabled(page, S.saveBtn);
 
     await expect(page).toHaveTitle(/Haste - testkey0/);
@@ -177,14 +178,14 @@ test.describe('Paste lifecycle', () => {
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    await page.locator(S.duplicateBtn).click();
+    await runCommand(page, 'Duplicate & edit');
     await waitForEditingMode(page);
     await expect(page).toHaveURL(/\/testkey0/); // no /edit suffix
 
     await expect(page.locator(S.editor)).toHaveValue(original);
 
     await expectEnabled(page, S.saveBtn);
-    await expectDisabled(page, S.duplicateBtn);
+    await expectCommand(page, 'Duplicate & edit', false);
   });
 
   // -- 8. Save the fork ------------------------------------------------------
@@ -202,7 +203,7 @@ test.describe('Paste lifecycle', () => {
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    await page.locator(S.duplicateBtn).click();
+    await runCommand(page, 'Duplicate & edit');
     await waitForEditingMode(page);
     await expect(page).toHaveURL(/\/testkey0/);
 
@@ -232,7 +233,7 @@ test.describe('Paste lifecycle', () => {
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    await page.locator(S.duplicateBtn).click();
+    await runCommand(page, 'Duplicate & edit');
     await waitForEditingMode(page);
     await page.locator(S.editor).fill(altered);
 
@@ -264,7 +265,7 @@ test.describe('Paste lifecycle', () => {
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    await page.locator(S.duplicateBtn).click();
+    await runCommand(page, 'Duplicate & edit');
     await waitForEditingMode(page);
     await page.locator(S.editor).fill(altered);
 
@@ -286,7 +287,7 @@ test.describe('Paste lifecycle', () => {
 
   // -- 11. New from presenting -----------------------------------------------
 
-  test('11 - New button from presenting state returns to empty editor', async ({ page }) => {
+  test('11 - New command from presenting state returns to empty editor', async ({ page }) => {
     await setupMockApi(page);
     await page.goto('/');
     await waitForEditingMode(page);
@@ -296,26 +297,26 @@ test.describe('Paste lifecycle', () => {
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    await page.locator(S.newBtn).click();
+    await runCommand(page, 'New paste');
     await page.waitForURL('/');
     await waitForEditingMode(page);
 
     await expect(page.locator(S.editor)).toHaveValue('');
     await expectDisabled(page, S.saveBtn);
-    await expectDisabled(page, S.duplicateBtn);
-    await expectEnabled(page, S.newBtn);
+    await expectCommand(page, 'Duplicate & edit', false);
+    await expectCommand(page, 'New paste', true);
   });
 
   // -- 12. New from editing --------------------------------------------------
 
-  test('12 - New button from editing state clears content and resets URL', async ({ page }) => {
+  test('12 - New command from editing state clears content and resets URL', async ({ page }) => {
     await setupMockApi(page);
     await page.goto('/');
     await waitForEditingMode(page);
 
     await page.locator(S.editor).fill('draft content not saved');
     page.once('dialog', (dialog) => dialog.accept());
-    await page.locator(S.newBtn).click();
+    await runCommand(page, 'New paste');
 
     await page.waitForURL('/');
     await waitForEditingMode(page);
@@ -494,7 +495,7 @@ test.describe('Paste lifecycle', () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(300);
 
     // Navigate to new doc (scroll goes to 0)
-    await page.locator(S.newBtn).click();
+    await runCommand(page, 'New paste');
     await page.waitForURL('/');
     await waitForEditingMode(page);
 
@@ -560,19 +561,19 @@ test.describe('Paste lifecycle', () => {
     expect(content).toMatch(/^ {2}/);
   });
 
-  test('27 - frozen document disables duplicate and twitter buttons', async ({ page }) => {
+  test('27 - frozen document hides duplicate but keeps twitter command', async ({ page }) => {
     const store = await setupMockApi(page);
     store.setFrozen('readme', 'This is a read-only document.');
 
     await page.goto('/readme');
     await waitForPresentingMode(page);
 
-    await expectDisabled(page, S.duplicateBtn);
-    await expectEnabled(page, S.twitterBtn);
-    await expectEnabled(page, S.newBtn);
+    await expectCommand(page, 'Duplicate & edit', false);
+    await expectCommand(page, 'Share on Twitter', true);
+    await expectCommand(page, 'New paste', true);
   });
 
-  // -- 28. Copy link / raw buttons -------------------------------------------
+  // -- 28. Copy link / raw commands ------------------------------------------
 
   test('28 - copy link and raw are disabled while editing, enabled when presenting', async ({
     page,
@@ -581,16 +582,16 @@ test.describe('Paste lifecycle', () => {
     await page.goto('/');
     await waitForEditingMode(page);
 
-    await expectDisabled(page, S.copyLinkBtn);
-    await expectDisabled(page, S.rawBtn);
+    await expectCommand(page, 'Copy link', false);
+    await expectCommand(page, 'View raw', false);
 
     await page.locator(S.editor).fill('shareable content');
     await page.locator(S.saveBtn).click();
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    await expectEnabled(page, S.copyLinkBtn);
-    await expectEnabled(page, S.rawBtn);
+    await expectCommand(page, 'Copy link', true);
+    await expectCommand(page, 'View raw', true);
   });
 
   test('29 - frozen document keeps copy link enabled but disables raw', async ({ page }) => {
@@ -600,11 +601,11 @@ test.describe('Paste lifecycle', () => {
     await page.goto('/readme');
     await waitForPresentingMode(page);
 
-    await expectEnabled(page, S.copyLinkBtn);
-    await expectDisabled(page, S.rawBtn);
+    await expectCommand(page, 'Copy link', true);
+    await expectCommand(page, 'View raw', false);
   });
 
-  test('30 - raw button opens /raw/:key in a new tab', async ({ page, context }) => {
+  test('30 - raw command opens /raw/:key in a new tab', async ({ page, context }) => {
     await setupMockApi(page);
     await page.goto('/');
     await waitForEditingMode(page);
@@ -614,10 +615,7 @@ test.describe('Paste lifecycle', () => {
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    const [popup] = await Promise.all([
-      context.waitForEvent('page'),
-      page.locator(S.rawBtn).click(),
-    ]);
+    const [popup] = await Promise.all([context.waitForEvent('page'), runCommand(page, 'View raw')]);
     await popup.waitForLoadState('domcontentloaded');
     expect(new URL(popup.url()).pathname).toBe('/raw/testkey0');
   });
@@ -636,7 +634,7 @@ test.describe('Copy link to clipboard', () => {
     await page.waitForURL(/\/testkey0/);
     await waitForPresentingMode(page);
 
-    await page.locator(S.copyLinkBtn).click();
+    await runCommand(page, 'Copy link');
 
     await expect(page.locator(S.toast)).toHaveClass(/visible/);
     await expect(page.locator(S.toast)).toHaveText('Link copied to clipboard');
@@ -694,7 +692,7 @@ test.describe('Draft autosave', () => {
     await page.waitForFunction(() => localStorage.getItem('haste-draft') !== null);
 
     page.once('dialog', (dialog) => dialog.accept());
-    await page.locator(S.newBtn).click();
+    await runCommand(page, 'New paste');
     await page.waitForURL('/');
 
     const stored = await page.evaluate(() => localStorage.getItem('haste-draft'));

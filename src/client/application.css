@@ -1,15 +1,14 @@
 :root {
     /* background layers (darkest to lightest) */
     --color-bg:          #002b36;   /* page/body background (solarized base03) */
-    --color-key-bg:      #00222b;   /* logo box (box1) */
-    --color-nav-bg:      #08323c;   /* button bar (box2) */
-    --color-tooltip-bg:  #173e48;   /* shortcut tooltip (box3) */
+    --color-key-bg:      #00222b;   /* drop overlay plaque */
+    --color-tooltip-bg:  #173e48;   /* info toast background */
 
     /* content colors */
     --color-editor-text: #93a1a1;   /* editor text (solarized base1) */
     --color-placeholder: #586e75;   /* editor placeholder (solarized base01) */
-    --color-icon:        #c4dce3;   /* nav icons + pointer bar + tooltip shortcut */
-    --color-accent:      #d33682;   /* progress bar, logo hover, icon hover (solarized magenta) */
+    --color-icon:        #c4dce3;   /* island mark and keycap */
+    --color-accent:      #d33682;   /* progress bar, save chip, focus rings (solarized magenta) */
     --color-logo:        #fdf6e3;   /* logo fill (solarized base3) */
 
     /* ui / overlay colors */
@@ -17,6 +16,18 @@
     --color-text-bright: #fff;      /* toast text, tooltip label */
     --color-line-highlight: rgba(255, 255, 255, 0.03); /* current line highlight */
     --color-selection:   #114955;   /* solid selection background with stronger contrast */
+    --color-find:        rgba(181, 137, 0, 0.35);  /* find matches (solarized yellow) */
+    --color-find-current: rgba(211, 54, 130, 0.55); /* current find match */
+
+    /* island (command palette) */
+    --color-island-bg:       rgba(8, 50, 60, 0.92);
+    --color-island-bg-hover: rgba(12, 58, 69, 0.96);
+    --color-island-panel:    #00161c;
+    --color-island-edge:     rgba(255, 255, 255, 0.06);
+    --color-island-chip:     rgba(255, 255, 255, 0.08);
+    --color-island-row-selected: rgba(211, 54, 130, 0.16);
+    --color-island-pulse:    rgba(211, 54, 130, 0.55);
+    --island-spring: cubic-bezier(0.34, 1.25, 0.64, 1);
 
     /* typography */
     --font-editor: monospace;
@@ -225,110 +236,18 @@ body {
     background: var(--color-selection) !important;
 }
 
+::highlight(haste-find) {
+    background-color: var(--color-find);
+}
+
+::highlight(haste-find-current) {
+    background-color: var(--color-find-current);
+    color: var(--color-logo);
+}
+
 #viewer.is-loading {
     opacity: 0;
     pointer-events: none;
-}
-
-/* key */
-
-#key {
-	position: fixed;
-	top: 0px;
-	right: 0px;
-	z-index: +1000; /* watch out */
-	box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-#box1 {
-	padding: 5px;
-	text-align: center;
-	background: var(--color-key-bg);
-	font-size: 0; /* fix safari font-size dependance */
-}
-
-#box2 {
-	background: var(--color-nav-bg);
-	font-size: 0px;
-	padding: 0px 5px;
-}
-
-#box1 a.logo, #box1 a.logo:visited {
-	display: inline-block;
-	width: 126px;
-	height: 42px;
-	mask: url('logo.svg') no-repeat center;
-  	mask-size: contain;
-	background-color: var(--color-logo);
-  	transition: background-color 0.15s ease;
-}
-
-#box1 a.logo:hover {
-    background-color: var(--color-accent);
-}
-
-#box2 .function {
-	width: 32px;
-	height: 37px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	position: relative;
-	opacity: 0.3;
-}
-
-#box2 .link embed {
-	vertical-align: bottom; /* fix for zeroClipboard style */
-}
-
-#box2 .function svg {
-	color: var(--color-icon);
-	display: block;
-}
-
-#box2 .function.enabled {
-	opacity: 0.8;
-}
-
-#box2 .function.enabled:hover {
-	cursor: hand;
-	cursor: pointer;
-	opacity: 1;
-}
-
-#box2 .function.enabled:hover svg {
-	color: var(--color-accent);
-	display: block;
-}
-
-#pointer {
-	display: block;
-	height: 3px;
-	width: 32px;
-	background: var(--color-icon);
-	bottom: 0px;
-	position: absolute;
-	margin: auto;
-	left: 0px;
-	right: 0px;
-}
-
-#box3 {
-	background: var(--color-tooltip-bg);
-	font-family: var(--font-ui);
-	font-size: 12px;
-	line-height: 14px;
-	padding: 10px 15px;
-}
-
-#box3 .label {
-	color: var(--color-text-bright);
-	font-weight: bold;
-}
-
-#box3 .shortcut {
-	color: var(--color-icon);
-	font-weight: normal;
 }
 
 /* --- hide elements for printing --- */

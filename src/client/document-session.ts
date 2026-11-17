@@ -1,9 +1,5 @@
 import { StorageService } from './storage';
-import {
-  highlightContent,
-  getExtensionForLanguage,
-  getLanguageForExtension,
-} from './highlight-config';
+import { highlightContent, getExtensionForLanguage, resolveLanguage } from './highlight-config';
 import { buildPath, type ParsedPath } from './path-utils';
 
 export interface DocumentRenderResult {
@@ -38,10 +34,12 @@ export class DocumentSession {
   }
 
   async load(path: ParsedPath): Promise<DocumentRenderResult> {
-    const urlLanguage = path.ext ? getLanguageForExtension(path.ext) : undefined;
+    const urlLanguage = path.ext ? resolveLanguage(path.ext) : undefined;
     const result = await this.storage.load(path.key);
-    const highlightResult = highlightContent(result.content, urlLanguage || result.language);
-    const language = highlightResult.language || urlLanguage || result.language;
+    const highlightResult = highlightContent(result.content, urlLanguage ?? result.language);
+    // An explicit plain-text extension ('' language) wins over server hints.
+    const plain = urlLanguage === '';
+    const language = plain ? undefined : highlightResult.language || urlLanguage || result.language;
 
     return {
       paste: {
@@ -51,9 +49,11 @@ export class DocumentSession {
         frozen: result.frozen,
       },
       highlighted: highlightResult.highlighted,
-      canonicalPath: language
-        ? buildPath(result.key, getExtensionForLanguage(language))
-        : buildPath(path.key),
+      canonicalPath: plain
+        ? buildPath(result.key, 'txt')
+        : language
+          ? buildPath(result.key, getExtensionForLanguage(language))
+          : buildPath(path.key),
     };
   }
 }

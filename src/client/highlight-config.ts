@@ -190,6 +190,47 @@ export function getExtensionForLanguage(language: string): string {
 }
 
 /**
+ * Resolve a URL extension to a language id: the extension map first, then
+ * any registered hljs language name. '' means plain text.
+ */
+export function resolveLanguage(ext: string): string | undefined {
+  const mapped = getLanguageForExtension(ext);
+  if (mapped !== undefined) return mapped;
+  const normalized = ext.toLowerCase();
+  return hljs.getLanguage(normalized) ? normalized : undefined;
+}
+
+export interface LanguageOption {
+  id: string;
+  name: string;
+  ext: string;
+}
+
+/**
+ * Languages offered by the palette: plain text, then each registered hljs
+ * language once (aliases collapse by display name), sorted by name.
+ * Ids that appear in the extension map are preferred so URLs stay short.
+ */
+export function listLanguages(): LanguageOption[] {
+  const mapped = new Set(Object.values(extensionMap));
+  const byName = new Map<string, string>();
+  for (const id of hljs.listLanguages()) {
+    const name = hljs.getLanguage(id)?.name ?? id;
+    const existing = byName.get(name);
+    if (existing === undefined || (!mapped.has(existing) && mapped.has(id))) {
+      byName.set(name, id);
+    }
+  }
+  const languages = [...byName].map(([name, id]) => ({
+    id,
+    name,
+    ext: getExtensionForLanguage(id),
+  }));
+  languages.sort((a, b) => a.name.localeCompare(b.name));
+  return [{ id: '', name: 'Plain text', ext: 'txt' }, ...languages];
+}
+
+/**
  * Result of highlighting operation
  */
 export interface HighlightResult {
