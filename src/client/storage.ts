@@ -21,13 +21,37 @@ export interface SaveResult {
   key: string;
 }
 
+/** Recently loaded or saved pastes kept in memory (pastes never change). */
+const RECENT_LIMIT = 16;
+
 export class StorageService {
+  private recent = new Map<string, LoadResult>();
+
+  /**
+   * Back/forward to a paste seen in this tab renders from memory: the load
+   * then resolves in microtasks, before the next frame, so the page matches
+   * the browser's snapshot when a swipe gesture hands over to it.
+   */
+  private remember(doc: LoadResult): void {
+    this.recent.delete(doc.key);
+    this.recent.set(doc.key, doc);
+    if (this.recent.size > RECENT_LIMIT) {
+      this.recent.delete(this.recent.keys().next().value!);
+    }
+  }
+
   /**
    * Load document from server
    * @throws Error if fetch fails or document not found
    * @returns LoadedDocumentState with guaranteed key
    */
   async load(key: string): Promise<LoadResult> {
+    const cached = this.recent.get(key);
+    if (cached) {
+      this.remember(cached); // refresh its position
+      return cached;
+    }
+
     const response = await fetch(`/documents/${key}`);
 
     if (!response.ok) {
@@ -39,12 +63,14 @@ export class StorageService {
 
     const data: GetResponse = await response.json();
 
-    return {
+    const doc: LoadResult = {
       content: data.content,
       key: data.key,
       language: data.language,
       frozen: data.frozen,
     };
+    this.remember(doc);
+    return doc;
   }
 
   /**
@@ -67,6 +93,7 @@ export class StorageService {
 
     const data: SaveResponse = await response.json();
 
+    this.remember({ key: data.key, content });
     return {
       key: data.key,
     };

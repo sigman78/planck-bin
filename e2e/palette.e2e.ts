@@ -36,6 +36,120 @@ test.describe('Command palette', () => {
     await expect(page.locator(S.island)).not.toHaveClass(/open/);
   });
 
+  /** Press Escape in the open palette and sample the island width every frame until folded. */
+  async function foldWidths(page: Page): Promise<number[]> {
+    return page.evaluate(
+      () =>
+        new Promise<number[]>((resolve) => {
+          const island = document.getElementById('island')!;
+          const seen: number[] = [];
+          const t0 = performance.now();
+          const pinned = () => parseFloat(island.style.width);
+          const tick = () => {
+            seen.push(island.getBoundingClientRect().width);
+            if (performance.now() - t0 < 1200) requestAnimationFrame(tick);
+            else resolve(seen);
+          };
+          island
+            .querySelector<HTMLInputElement>('.island-input')!
+            .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          // The width close() morphs to; the trace below must end there too.
+          (window as unknown as { __foldTarget: number }).__foldTarget = pinned();
+          requestAnimationFrame(tick);
+        })
+    );
+  }
+
+  /**
+   * The fold ends at `target` without first collapsing to the bare mark and
+   * growing back. The spring easing undershoots by up to about 6px; the bug
+   * dipped 65px below the hover pill.
+   */
+  async function expectDirectFold(page: Page, widths: number[], target: number) {
+    const trace = `widths: ${widths.map(Math.round).join(',')}`;
+    // One morph, aimed at the final size (not a hover size that folds again later).
+    const aimed = await page.evaluate(
+      () => (window as unknown as { __foldTarget: number }).__foldTarget
+    );
+    expect(Math.abs(aimed - target), trace).toBeLessThan(1);
+    expect(Math.abs(widths[widths.length - 1] - target), trace).toBeLessThan(1);
+    expect(Math.min(...widths), trace).toBeGreaterThan(target - 10);
+  }
+
+  async function startCompact(page: Page) {
+    await start(page);
+    // The compact stage, where only hover or focus reveals the keycap.
+    await page.evaluate(() => localStorage.setItem('haste-hint-stage', 'known'));
+    await page.reload();
+    await expect(page.locator(S.island)).toHaveAttribute('data-settled', '');
+  }
+
+  test('Escape under a hovering pointer folds straight into the hover pill', async ({ page }) => {
+    await startCompact(page);
+    const trigger = page.locator(S.paletteTrigger);
+    await trigger.hover();
+    await page.waitForTimeout(600); // hover expansion done
+    const hoverWidth = await page.locator(S.island).evaluate((el) => el.offsetWidth);
+
+    await trigger.click();
+    await expect(page.locator(S.island)).toHaveClass(/open/);
+    await page.waitForTimeout(600);
+
+    await expectDirectFold(page, await foldWidths(page), hoverWidth);
+    await expect(page.locator(S.island)).not.toHaveClass(/open/);
+  });
+
+  test('Escape after opening from the focused trigger folds into the focused pill', async ({
+    page,
+  }) => {
+    await startCompact(page);
+    await page.mouse.move(10, 300); // pointer well away from the island
+    const trigger = page.locator(S.paletteTrigger);
+    await trigger.focus();
+    await page.waitForTimeout(600); // focus expansion done
+    const focusWidth = await page.locator(S.island).evaluate((el) => el.offsetWidth);
+
+    await page.keyboard.press('Enter');
+    await expect(page.locator(S.island)).toHaveClass(/open/);
+    await page.waitForTimeout(600);
+
+    await expectDirectFold(page, await foldWidths(page), focusWidth);
+    await expect(trigger).toBeFocused();
+  });
+
+  test('Escape with the pointer elsewhere folds to the compact pill as before', async ({
+    page,
+  }) => {
+    await startCompact(page);
+    await page.mouse.move(10, 300);
+    const compactWidth = await page.locator(S.island).evaluate((el) => el.offsetWidth);
+
+    await page.keyboard.press('Control+/');
+    await expect(page.locator(S.island)).toHaveClass(/open/);
+    await page.waitForTimeout(600);
+
+    await expectDirectFold(page, await foldWidths(page), compactWidth);
+  });
+
+  test('Escape with the pointer over the open panel but not the pill folds to the compact pill', async ({
+    page,
+  }) => {
+    await startCompact(page);
+    await page.mouse.move(10, 300);
+    const compactWidth = await page.locator(S.island).evaluate((el) => el.offsetWidth);
+
+    await page.keyboard.press('Control+/');
+    await expect(page.locator(S.island)).toHaveClass(/open/);
+    await page.waitForTimeout(600);
+    // Over the panel, left of where the folded pill will be.
+    const box = (await page.locator(S.island).boundingBox())!;
+    await page.mouse.move(box.x + 40, box.y + 60);
+    await page.mouse.move(box.x + 41, box.y + 61);
+    expect(await page.locator(S.island).evaluate((el) => el.matches(':hover'))).toBe(true);
+
+    await expectDirectFold(page, await foldWidths(page), compactWidth);
+  });
+
   test('opens on trigger click and closes on outside click', async ({ page }) => {
     await start(page);
     await page.locator(S.paletteTrigger).click();
@@ -428,6 +542,22 @@ test.describe('Command palette', () => {
     await expect(page.locator(S.island)).toHaveAttribute('data-stage', 'known');
     await page.mouse.move(10, 400);
     await expect(page.locator('#island .island-kc')).toBeHidden();
+  });
+
+  test('reopening starts at the first row with the list scrolled to the top', async ({ page }) => {
+    await start(page);
+    await savePaste(page, 'hello world');
+    const selected = page.locator(S.paletteSelected);
+
+    await openPalette(page);
+    const first = await selected.textContent();
+    for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
+    await expect(selected).not.toHaveText(first!);
+    await page.keyboard.press('Escape');
+
+    await openPalette(page);
+    await expect(selected).toHaveText(first!);
+    expect(await page.locator('#island-list').evaluate((el) => el.scrollTop)).toBe(0);
   });
 
   test('About opens the about document', async ({ page }) => {

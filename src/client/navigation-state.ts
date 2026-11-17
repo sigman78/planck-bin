@@ -3,8 +3,37 @@ export type HistoryState = {
   scrollY?: number;
 };
 
+export interface NavigateInfo {
+  /** The browser already animated this step (e.g. a swipe-back gesture). */
+  browserAnimated: boolean;
+}
+
+type NavigateHandler = (path: string, state: HistoryState | undefined, info: NavigateInfo) => void;
+
+/** Safari proper (not Chrome, Edge or Firefox on iOS, which also say "Safari"). */
+export function isSafari(userAgent: string): boolean {
+  return (
+    /Safari\//.test(userAgent) &&
+    !/Chrome\/|Chromium\/|CriOS\/|FxiOS\/|EdgiOS\/|Edg\//.test(userAgent)
+  );
+}
+
+/**
+ * Whether the browser already animated this history step, e.g. Safari's
+ * swipe-back: our own page transition would then play a second animation
+ * after the browser's. Browsers that report it set `hasUAVisualTransition`.
+ * Safari without the flag gets no transition on any back/forward step, since
+ * a swipe cannot be told apart from a button press there.
+ */
+export function browserAnimatedHistoryStep(evt: Event, userAgent: string): boolean {
+  if ('hasUAVisualTransition' in evt) {
+    return (evt as Event & { hasUAVisualTransition: unknown }).hasUAVisualTransition === true;
+  }
+  return isSafari(userAgent);
+}
+
 export class NavigationState {
-  private handler: ((path: string, state: HistoryState | undefined) => void) | null = null;
+  private handler: NavigateHandler | null = null;
   private lastPathname: string = window.location.pathname;
 
   constructor() {
@@ -12,17 +41,21 @@ export class NavigationState {
       const pathname = window.location.pathname;
       if (pathname === this.lastPathname) return;
       this.lastPathname = pathname;
-      this.handler?.(pathname, this.read(e.state));
+      this.handler?.(pathname, this.read(e.state), {
+        browserAnimated: browserAnimatedHistoryStep(e, navigator.userAgent),
+      });
     });
   }
 
-  onNavigate(handler: (path: string, state: HistoryState | undefined) => void): void {
+  onNavigate(handler: NavigateHandler): void {
     this.handler = handler;
     this.lastPathname = window.location.pathname;
   }
 
   resolve(): void {
-    this.handler?.(window.location.pathname, this.read(window.history.state));
+    this.handler?.(window.location.pathname, this.read(window.history.state), {
+      browserAnimated: false,
+    });
   }
 
   pushPath(path: string, state?: HistoryState): void {

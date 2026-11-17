@@ -1,6 +1,11 @@
 /*
  * Island - folded pill that morphs into the command palette.
  * Folded content is right-anchored and grows to the left.
+ *
+ * Nested shapes are concentric with the pill: chips are 22px tall with an
+ * 11px radius, leaving a 4px gap all round (pill radius 15 = 11 + 4). The
+ * pill's left padding is that same 4px, so a chip at the left end follows
+ * the pill's curve; the mark keeps its 8px from the right edge.
  */
 
 #island {
@@ -42,11 +47,16 @@
     transition: none;
 }
 
-#island:not(.open):hover {
+/*
+ * .hover-off: set while the palette folds with the pointer over the panel but
+ * outside the folded pill, so hover styling does not apply until the pointer
+ * is really over the pill (see command-palette.ts close()).
+ */
+#island:not(.open):not(.hover-off):hover {
     background: var(--color-island-bg-hover);
 }
 
-#island[data-mode='presenting'][data-stage='known']:not(.open):not(:hover):not(:focus-within) {
+#island[data-mode='presenting'][data-stage='known']:not(.open):not(:hover:not(.hover-off)):not(:focus-within) {
     opacity: 0.55;
 }
 
@@ -82,10 +92,12 @@
     display: flex;
     align-items: center;
     width: max-content;
+    min-width: 30px; /* the mark alone stays a circle despite the 4px left padding */
+    justify-content: flex-end;
     margin-left: auto;
     box-sizing: border-box;
     height: 30px;
-    padding: 0 8px;
+    padding: 0 8px 0 4px;
     white-space: nowrap;
     cursor: pointer; /* the whole folded pill opens the palette */
     transition:
@@ -115,7 +127,16 @@
 .island-save:focus-visible {
     outline: 1px solid var(--color-accent);
     outline-offset: 2px;
-    border-radius: 10px;
+}
+
+.island-trigger:focus-visible {
+    border-radius: 10px; /* the save chip's outline follows its own radius */
+}
+
+/* Folded-size measurement on close (command-palette.ts foldedSize): jump the
+   slide-out parts to their end state so the morph targets the final width. */
+.island-hint.is-measuring .island-slide {
+    transition: none;
 }
 
 /* Elements that slide out to the left; collapsed by default. */
@@ -133,8 +154,15 @@
         padding 0.45s var(--island-spring);
 }
 
+/* Chips: 22px tall, 11px radius; see the note at the top. */
+.island-hint .island-save,
+.island-kc {
+    box-sizing: border-box;
+    height: 22px;
+    border-radius: 11px;
+}
+
 .island-hint .island-save {
-    border-radius: 10px;
     background: var(--color-accent);
     color: var(--color-text-bright);
     font-weight: bold;
@@ -145,7 +173,7 @@
     max-width: 60px;
     opacity: 1;
     margin-right: 6px;
-    padding: 2px 9px;
+    padding: 0 9px;
 }
 
 .island-hint .island-save:disabled {
@@ -158,27 +186,30 @@
 }
 
 .island-kc {
+    display: inline-flex;
+    align-items: center;
     font-family: var(--font-editor);
     font-size: 11px;
     color: var(--color-icon);
     background: var(--color-island-chip);
-    border-radius: 10px;
 }
 
+/* Text has no shape to align: it keeps an 8px inset (4px padding + 4px). */
 #island[data-stage='first'] .island-text {
     max-width: 120px;
     opacity: 1;
+    margin-left: 4px;
     margin-right: 8px;
 }
 
 #island[data-stage='first'] .island-kc,
 #island[data-stage='learn'] .island-kc,
-#island:not(.open):hover .island-kc,
+#island:not(.open):not(.hover-off):hover .island-kc,
 #island:not(.open):focus-within .island-kc {
     max-width: 60px;
     opacity: 1;
     margin-right: 7px;
-    padding: 3px 8px;
+    padding: 0 8px;
 }
 
 .island-mark {
@@ -190,7 +221,7 @@
     transition: color 0.2s ease;
 }
 
-#island:hover .island-mark,
+#island:not(.hover-off):hover .island-mark,
 #island[data-stage='first'] .island-mark,
 #island[data-stage='learn'] .island-mark {
     color: var(--color-logo);
@@ -209,6 +240,7 @@
     #island[data-stage='learn'] .island-text {
         max-width: 120px;
         opacity: 1;
+        margin-left: 4px;
         margin-right: 8px;
     }
 }

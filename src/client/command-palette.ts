@@ -62,6 +62,7 @@ export class CommandPalette {
   private findStatus: FindStatus = { current: 0, total: 0 };
   private prevFocus: Element | null = null;
   private collapseTimer: ReturnType<typeof setTimeout> | null = null;
+  private pointer: { x: number; y: number } | null = null;
   private openedCallbacks: Array<() => void> = [];
 
   constructor(
@@ -99,6 +100,15 @@ export class CommandPalette {
     document.addEventListener('pointerdown', (evt) => {
       if (this.isOpen() && !this.root.contains(evt.target as Node)) this.close(false);
     });
+
+    // Last pointer position, to tell on close whether it will still be over the folded pill.
+    document.addEventListener(
+      'pointermove',
+      (evt) => {
+        this.pointer = { x: evt.clientX, y: evt.clientY };
+      },
+      { passive: true }
+    );
 
     window.addEventListener(
       'keydown',
@@ -159,6 +169,7 @@ export class CommandPalette {
     if (this.isOpen()) return;
     this.prevFocus = document.activeElement;
     if (this.collapseTimer !== null) clearTimeout(this.collapseTimer);
+    this.root.classList.remove('hover-off');
 
     // Pin the folded size so the morph has a numeric start value.
     this.root.style.width = `${this.root.offsetWidth}px`;
@@ -170,9 +181,12 @@ export class CommandPalette {
     this.trigger.setAttribute('aria-expanded', 'true');
     this.input.setAttribute('aria-expanded', 'true');
 
+    // Every invocation starts fresh: root menu, empty query, first row.
     this.menu = null;
     this.input.value = '';
     this.findStatus = { current: 0, total: 0 };
+    this.selected = 0;
+    this.list.scrollTop = 0;
     this.render();
     this.input.focus({ preventScroll: true });
     this.openedCallbacks.forEach((cb) => cb());
@@ -188,11 +202,28 @@ export class CommandPalette {
     this.trigger.setAttribute('aria-expanded', 'false');
     this.input.setAttribute('aria-expanded', 'false');
 
+    // Restore focus before measuring: focus back on the trigger also expands the pill.
+    const prev = this.prevFocus;
+    this.prevFocus = null;
+    if (restoreFocus && prev instanceof HTMLElement && prev.isConnected && prev !== document.body) {
+      prev.focus({ preventScroll: true });
+    }
+
     // Animate back to the folded content size, then return to auto sizing.
-    this.root.style.width = `${this.hint.offsetWidth}px`;
-    this.root.style.height = `${this.hint.offsetHeight}px`;
+    // The open panel is much larger than the pill: a pointer over it "hovers"
+    // now but will be outside once folded. Fold straight to the plain pill
+    // then, with hover styling off until the fold is done, instead of to the
+    // hover pill and again once the hover ends.
+    let folded = this.foldedSize();
+    if (this.root.matches(':hover') && !this.pointerInFolded(folded)) {
+      this.root.classList.add('hover-off');
+      folded = this.foldedSize();
+    }
+    this.root.style.width = `${folded.width}px`;
+    this.root.style.height = `${folded.height}px`;
     const release = () => {
       if (this.isOpen()) return;
+      this.root.classList.remove('hover-off');
       this.root.style.width = '';
       this.root.style.height = '';
     };
@@ -206,12 +237,33 @@ export class CommandPalette {
       this.root.removeEventListener('transitionend', onEnd);
       release();
     }, COLLAPSE_FALLBACK_MS);
+  }
 
-    const prev = this.prevFocus;
-    this.prevFocus = null;
-    if (restoreFocus && prev instanceof HTMLElement && prev.isConnected && prev !== document.body) {
-      prev.focus({ preventScroll: true });
-    }
+  /**
+   * The size the folded pill is about to settle at. Its slide-out parts only
+   * start transitioning once `.open` is gone (e.g. the keycap re-expanding
+   * under a pointer that is still over the island), so a plain read returns
+   * their collapsed start values: the pill would shrink to the bare mark and
+   * then grow again. Reading with those transitions off gives the end state.
+   */
+  /** Whether the last pointer position lies inside the pill once folded to `size`. */
+  private pointerInFolded(size: { width: number; height: number }): boolean {
+    if (!this.pointer) return false;
+    const rect = this.root.getBoundingClientRect(); // right-anchored: right and top stay put
+    const { x, y } = this.pointer;
+    return (
+      x >= rect.right - size.width &&
+      x <= rect.right &&
+      y >= rect.top &&
+      y <= rect.top + size.height
+    );
+  }
+
+  private foldedSize(): { width: number; height: number } {
+    this.hint.classList.add('is-measuring');
+    const size = { width: this.hint.offsetWidth, height: this.hint.offsetHeight };
+    this.hint.classList.remove('is-measuring');
+    return size;
   }
 
   setMode(mode: ViewMode): void {

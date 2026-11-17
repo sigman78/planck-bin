@@ -110,12 +110,15 @@ export class AppController {
 
     // Initialize history manager
     this.navigation = new NavigationState();
-    this.navigation.onNavigate((path, state) => {
+    this.navigation.onNavigate((path, state, info) => {
       const route = parsePath(path);
+      // After a browser-animated step (swipe back/forward) render in place:
+      // a page wipe on top of the browser's own animation reads as a blink.
+      const animate = !info.browserAnimated;
       if (!route.key) {
-        this.handleRoot(state);
+        this.handleRoot(state, animate);
       } else {
-        this.loadDocumentByPath(route, 'presenting', state as HistoryState);
+        this.loadDocumentByPath(route, 'presenting', state as HistoryState, animate);
       }
     });
   }
@@ -140,7 +143,7 @@ export class AppController {
   /**
    * Handle root route (/)
    */
-  private handleRoot(state?: unknown): void {
+  private handleRoot(state?: unknown, animate = true): void {
     if (this.isBusy) return;
 
     const isFirstLoad = this.isFirstLoad;
@@ -159,7 +162,7 @@ export class AppController {
         this.notify.toast('Restored unsaved draft');
       }
     }
-    this.transitionToView('editing', { scrollY: targetScrollY });
+    this.transitionToView('editing', { scrollY: targetScrollY, animate });
   }
 
   /**
@@ -231,7 +234,8 @@ export class AppController {
   private async loadDocumentByPath(
     path: ParsedPath,
     defaultMode: 'editing' | 'presenting',
-    historyState?: HistoryState
+    historyState?: HistoryState,
+    animate = true
   ): Promise<void> {
     // Guard: can't load while loading/saving
     if (this.isBusy) return;
@@ -269,6 +273,7 @@ export class AppController {
       this.transitionToView(defaultMode, {
         highlighted: defaultMode === 'presenting' ? result.highlighted : undefined,
         scrollY: targetScrollY,
+        animate,
       });
     } catch (err) {
       console.error('Load failed:', err);
@@ -287,7 +292,7 @@ export class AppController {
 
   private transitionToView(
     mode: ViewMode,
-    options: { highlighted?: string; scrollY?: number | null } = {}
+    options: { highlighted?: string; scrollY?: number | null; animate?: boolean } = {}
   ): void {
     this.viewMode = mode;
     // Close first: renderFullState may move focus into the editor.
@@ -300,8 +305,9 @@ export class AppController {
         window.scrollTo({ top: options.scrollY, behavior: 'instant' });
       }
     };
-    // The page wipe is for in-app navigation; the first render appears as-is.
-    if (this.hasRendered) {
+    // The page wipe is for in-app navigation; the first render, and a step
+    // the browser already animated, appear as-is.
+    if (this.hasRendered && options.animate !== false) {
       this.transitions.run(render);
     } else {
       this.hasRendered = true;
