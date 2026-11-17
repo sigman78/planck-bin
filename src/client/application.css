@@ -20,8 +20,8 @@
     --color-find-current: rgba(211, 54, 130, 0.55); /* current find match */
 
     /* island (command palette) */
-    --color-island-bg:       rgba(8, 50, 60, 0.92);
-    --color-island-bg-hover: rgba(12, 58, 69, 0.96);
+    --color-island-bg:       rgba(12, 58, 69, 0.96);
+    --color-island-bg-hover: rgba(17, 68, 80, 0.98);
     --color-island-panel:    #00161c;
     --color-island-edge:     rgba(255, 255, 255, 0.06);
     --color-island-chip:     rgba(255, 255, 255, 0.08);
