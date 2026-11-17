@@ -90,8 +90,20 @@ export class ViewManager {
    * Setup textarea event handlers (Tab key and input notifications)
    */
   private setupEditorHandlers(): void {
-    // Tab key handling for indentation
+    // Tab indents. Escape, then Tab, lets focus leave instead (no keyboard trap).
+    let tabReleased = false;
+    this.editor.addEventListener('blur', () => {
+      tabReleased = false;
+    });
     this.editor.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Escape') {
+        tabReleased = true;
+        return;
+      }
+      if (tabReleased && ['Shift', 'Control', 'Alt', 'Meta'].includes(evt.key)) return;
+      const release = tabReleased;
+      tabReleased = false;
+      if (evt.key === 'Tab' && release) return; // default action moves focus
       if (evt.key === 'Tab') {
         evt.preventDefault();
         const start = this.editor.selectionStart;
@@ -293,6 +305,8 @@ export class ViewManager {
       const el = document.createElement('a');
       el.href = `#L${i}`;
       el.id = `L${i}`;
+      // The gutter is aria-hidden; keep its links out of the Tab order too.
+      el.tabIndex = -1;
       el.textContent = String(i);
       frag.appendChild(el);
     }

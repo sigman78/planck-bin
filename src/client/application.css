@@ -10,6 +10,7 @@
     --color-icon:        #c4dce3;   /* island mark and keycap */
     --color-accent:      #d33682;   /* progress bar, save chip, focus rings (solarized magenta) */
     --color-logo:        #fdf6e3;   /* logo fill (solarized base3) */
+    --color-focus-muted: #2b5c68;   /* quiet focus ring: viewer (its left edge runs along the gutter) and gutter links */
 
     /* ui / overlay colors */
     --color-toast-bg:    #a31515;   /* error toast background (info toasts reuse tooltip bg) */
@@ -151,6 +152,12 @@ body {
     scroll-margin-top: 50vh; /* make activated anchor v-centered */
 }
 
+/* A clicked line link takes focus (it is the #L target); keep its ring quiet. */
+#gutter a:focus {
+    outline: 1px solid var(--color-focus-muted);
+    outline-offset: -1px;
+}
+
 #gutter a:hover {
     color: var(--color-editor-text);
 }
@@ -228,6 +235,29 @@ body {
     position: relative;
     z-index: 1;
     transition: opacity 0.15s;
+}
+
+#viewer:focus {
+    outline: none;
+}
+
+#viewer:focus-visible {
+    outline: 1px solid var(--color-focus-muted);
+    outline-offset: 4px;
+    border-radius: 2px;
+}
+
+/* Read by screen readers, not shown. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 #viewer code {

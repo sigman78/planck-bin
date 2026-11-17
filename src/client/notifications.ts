@@ -17,10 +17,24 @@ export interface ToastOptions {
 
 export class Notifications {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped on every toast, so a deferred re-announce never overwrites a newer message. */
+  private toastSeq = 0;
 
   toast(message: string, kind: ToastKind = 'info', options: ToastOptions = {}): void {
     const toast = document.getElementById('toast')!;
-    toast.textContent = message;
+    // Errors interrupt the screen reader; everything else waits its turn.
+    toast.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+    if (toast.textContent === message) {
+      // An unchanged text is not announced again: clear it, then set it on the next frame.
+      toast.textContent = '';
+      const seq = ++this.toastSeq;
+      requestAnimationFrame(() => {
+        if (seq === this.toastSeq) toast.textContent = message;
+      });
+    } else {
+      this.toastSeq++;
+      toast.textContent = message;
+    }
     toast.classList.toggle('error', kind === 'error');
     toast.classList.toggle('brief', options.brief === true);
     toast.classList.add('visible');

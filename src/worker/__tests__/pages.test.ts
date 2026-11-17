@@ -2,13 +2,12 @@
 
 import { Hono } from 'hono';
 import { createPageHandler, MAX_RENDER_CHARS, parseDocumentRoute } from '../pages';
+import { VIEWER_ANCHOR } from '../render';
 import type { Env } from '../types';
 import { fakeEnv, type FakeEnvOptions } from '../__fakes__/env';
 import { EMBEDDED_DOCUMENT_ID } from '../../shared/types';
 
-const SHELL =
-  '<html><head><title>hastebin</title></head><body>' +
-  '<pre id="viewer" style="display: none"><code class="hljs"></code></pre></body></html>';
+const SHELL = '<html><head><title>hastebin</title></head><body>' + VIEWER_ANCHOR + '</body></html>';
 
 const NOW = Math.floor(Date.now() / 1000);
 const base: FakeEnvOptions = {

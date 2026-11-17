@@ -20,7 +20,7 @@
 
 	<body>
 		<div id="progress-bar"></div>
-		<div id="toast" aria-live="assertive" aria-atomic="true"></div>
+		<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 		<div id="island" class="no-print" style="visibility: hidden">
 			<div class="island-hint">
 				<!-- Save sits right of everything that expands on hover, so it never slides away from the pointer. -->
@@ -48,10 +48,13 @@
 		<div id="editor-container">
 			<div id="gutter" aria-hidden="true"></div>
 			<div id="line-highlight" aria-hidden="true"></div>
-			<pre id="viewer" style="display: none"><code class="hljs"></code></pre>
+			<!-- tabindex lets keyboard users scroll long lines; the server renderer matches this tag exactly. -->
+			<pre id="viewer" style="display: none" tabindex="0" role="region" aria-label="Paste content"><code class="hljs"></code></pre>
 			<textarea id="editor" spellcheck="false" style="display: none"
+				aria-label="Paste content" aria-describedby="editor-help"
 				placeholder="Paste your code here..."></textarea>
 		</div>
+		<p id="editor-help" class="visually-hidden">Tab inserts spaces. Press Escape, then Tab, to move focus out of the editor.</p>
 		<div id="drop-overlay" aria-hidden="true">
 			<div class="drop-overlay-plaque">Drop file to editor</div>
 		</div>

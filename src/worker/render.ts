@@ -19,8 +19,8 @@
 import { EMBEDDED_DOCUMENT_ID, type GetResponse } from '../shared/types';
 
 /** The empty viewer as it appears in the built shell (src/client/index.html). */
-export const VIEWER_ANCHOR =
-  '<pre id="viewer" style="display: none"><code class="hljs"></code></pre>';
+const VIEWER_A11Y = 'tabindex="0" role="region" aria-label="Paste content"';
+export const VIEWER_ANCHOR = `<pre id="viewer" style="display: none" ${VIEWER_A11Y}><code class="hljs"></code></pre>`;
 const TITLE_OPEN = '<title>';
 const TITLE_CLOSE = '</title>';
 const BODY_CLOSE = '</body>';
@@ -45,7 +45,7 @@ export function renderDocumentPage(shell: string, input: RenderInput): string | 
   let html = shell.slice(0, titleStart) + title + shell.slice(titleEnd + TITLE_CLOSE.length);
 
   const viewer =
-    '<pre id="viewer" style="display: block"><code class="hljs">' +
+    `<pre id="viewer" style="display: block" ${VIEWER_A11Y}><code class="hljs">` +
     escapeText(doc.content) +
     '</code></pre>';
   const withViewer = replaceOnce(html, VIEWER_ANCHOR, viewer);
