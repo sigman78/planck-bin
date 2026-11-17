@@ -324,6 +324,19 @@ export class CommandPalette {
         evt.preventDefault();
         this.move(evt.shiftKey ? -1 : 1);
         break;
+      case 'PageDown':
+      case 'PageUp':
+        evt.preventDefault();
+        this.page(evt.key === 'PageDown' ? 1 : -1);
+        break;
+      case 'Home':
+      case 'End':
+        // The list owns Home/End (the query is short; Left/Right still move the
+        // caret). Shift+Home/End keep selecting text in the query.
+        if (evt.shiftKey) break;
+        evt.preventDefault();
+        this.jump(evt.key === 'Home' ? 1 : -1);
+        break;
       case 'Enter':
         evt.preventDefault();
         this.activate(this.selected, { shiftKey: evt.shiftKey });
@@ -509,6 +522,29 @@ export class CommandPalette {
   private move(delta: 1 | -1): void {
     if (this.rows.length === 0) return;
     const next = this.nearestEnabled(this.selected + delta, delta);
+    if (!this.rows[next]?.disabled) this.select(next);
+  }
+
+  /** Move by one visible page of rows (less one, so the edge row stays in view). */
+  private page(direction: 1 | -1): void {
+    if (this.rows.length === 0) return;
+    const row = this.list.querySelector<HTMLElement>('[role="option"]');
+    const perPage = row
+      ? Math.max(1, Math.floor(this.list.clientHeight / row.offsetHeight) - 1)
+      : 1;
+    this.selectNearest(this.selected + direction * perPage, direction);
+  }
+
+  /** Select the first (1) or last (-1) enabled row. */
+  private jump(direction: 1 | -1): void {
+    if (this.rows.length === 0) return;
+    this.selectNearest(direction === 1 ? 0 : this.rows.length - 1, direction);
+  }
+
+  /** Select the enabled row nearest `target`, looking in `direction` first. */
+  private selectNearest(target: number, direction: 1 | -1): void {
+    let next = this.nearestEnabled(target, direction);
+    if (this.rows[next]?.disabled) next = this.nearestEnabled(target, direction === 1 ? -1 : 1);
     if (!this.rows[next]?.disabled) this.select(next);
   }
 

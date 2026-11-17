@@ -560,6 +560,56 @@ test.describe('Command palette', () => {
     expect(await page.locator('#island-list').evaluate((el) => el.scrollTop)).toBe(0);
   });
 
+  test('PageUp/PageDown move by a page, Home/End jump to the ends', async ({ page }) => {
+    await start(page);
+    await savePaste(page, 'hello world');
+    await openPalette(page);
+
+    const rows = page.locator(S.paletteRow);
+    const enabled = page.locator(`${S.paletteRow}:not([aria-disabled="true"])`);
+    const index = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#island .island-row')].findIndex(
+          (el) => el.getAttribute('aria-selected') === 'true'
+        )
+      );
+    const count = await rows.count();
+    expect(count).toBeGreaterThan(8); // more than one page
+
+    await page.keyboard.press('PageDown');
+    const pageStep = await index();
+    expect(pageStep).toBeGreaterThan(1);
+
+    await page.keyboard.press('End');
+    await expect(enabled.last()).toHaveAttribute('aria-selected', 'true');
+    const last = await index();
+    await expect(rows.nth(last)).toBeInViewport();
+
+    await page.keyboard.press('PageUp');
+    expect(await index()).toBe(Math.max(last - pageStep, 0));
+
+    await page.keyboard.press('Home');
+    await expect(rows.first()).toHaveAttribute('aria-selected', 'true');
+    await expect(rows.first()).toBeInViewport();
+  });
+
+  test('End skips a disabled last row; Shift+Home still selects query text', async ({ page }) => {
+    await start(page); // empty editor: Save is listed last and disabled
+    await openPalette(page);
+
+    const enabled = page.locator(`${S.paletteRow}:not([aria-disabled="true"])`);
+    await expect(page.locator(S.paletteRow).last()).toHaveAttribute('aria-disabled', 'true');
+    await page.keyboard.press('End');
+    await expect(enabled.last()).toHaveAttribute('aria-selected', 'true');
+
+    await page.keyboard.type('zoom');
+    await page.keyboard.press('Shift+Home');
+    const selection = await page
+      .locator(S.paletteInput)
+      .evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]);
+    expect(selection).toEqual([0, 4]);
+  });
+
   test('About opens the about document', async ({ page }) => {
     const store = await start(page);
     store.setFrozen('about', '# About this pastebin');
