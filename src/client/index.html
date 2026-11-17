@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- Inline background (= --color-bg) and sizes keep a frame painted before the stylesheet dark and small. -->
+<html lang="en" style="background: #002b36">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,13 +21,13 @@
 	<body>
 		<div id="progress-bar"></div>
 		<div id="toast" aria-live="assertive" aria-atomic="true"></div>
-		<div id="island" class="no-print" data-stage="learn" data-mode="editing">
+		<div id="island" class="no-print" style="visibility: hidden">
 			<div class="island-hint">
 				<button type="button" class="island-save island-slide" disabled aria-hidden="true">Save</button>
 				<button type="button" class="island-trigger" aria-label="Commands (Ctrl+/)" aria-haspopup="listbox" aria-expanded="false">
 					<span class="island-text island-slide">commands</span>
 					<kbd class="island-kc island-slide">Ctrl /</kbd>
-					<svg class="island-mark" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<svg class="island-mark" width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<path d="M5.6 1.2 L2.4 14.8" />
 						<path d="M3.5 10.2 C4.9 7.6 7.2 6.6 9 7.2 C10.4 7.7 10.3 8.9 9.9 10.4 L8.9 14.8" />
 						<path d="M1.8 5.2 L7.6 3.4" />
@@ -42,11 +43,12 @@
 			</div>
 		</div>
 
+		<!-- Both views start hidden; the app shows the right one on its first render. -->
 		<div id="editor-container">
 			<div id="gutter" aria-hidden="true"></div>
 			<div id="line-highlight" aria-hidden="true"></div>
-			<pre id="viewer"><code class="hljs"></code></pre>
-			<textarea id="editor" spellcheck="false"
+			<pre id="viewer" style="display: none"><code class="hljs"></code></pre>
+			<textarea id="editor" spellcheck="false" style="display: none"
 				placeholder="Paste your code here..."></textarea>
 		</div>
 		<div id="drop-overlay" aria-hidden="true">

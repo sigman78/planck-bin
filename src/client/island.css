@@ -26,6 +26,22 @@
         opacity 0.3s ease;
 }
 
+/*
+ * The initial state (hint stage, mode, Save) is applied by script, possibly
+ * after the first paint. The markup hides the island (inline, so it holds even
+ * before this stylesheet applies); until the app marks it settled, keep it
+ * transparent with transitions off. Settling then fades it in through the
+ * regular opacity transition while everything else is already final.
+ */
+#island:not([data-settled]) {
+    opacity: 0 !important; /* beat the state rules (e.g. the presenting dim) */
+}
+
+#island:not([data-settled]),
+#island:not([data-settled]) * {
+    transition: none;
+}
+
 #island:not(.open):hover {
     background: var(--color-island-bg-hover);
 }

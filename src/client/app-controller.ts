@@ -61,6 +61,8 @@ export class AppController {
   private activity: ActivityState = 'idle';
   private scrollToTopOnSave: boolean;
   private isFirstLoad = true;
+  /** False until the first full render; that one skips the page wipe. */
+  private hasRendered = false;
 
   private get isBusy(): boolean {
     return this.activity !== 'idle';
@@ -243,7 +245,12 @@ export class AppController {
     const hideWhileLoading = this.isFirstLoad;
     this.isFirstLoad = false;
     this.activity = 'loading';
-    if (hideWhileLoading) this.view.renderLoadingState();
+    if (hideWhileLoading) {
+      this.view.renderLoadingState();
+      // Show the island in its target mode while the paste loads.
+      this.palette.setMode(defaultMode);
+      this.palette.settle();
+    }
     try {
       const result = await this.session.load(path);
       this.document.apply(result.paste);
@@ -291,13 +298,21 @@ export class AppController {
     this.viewMode = mode;
     // Close first: renderFullState may move focus into the editor.
     this.palette.close(false);
-    this.transitions.run(() => {
+    const render = () => {
       this.view.renderFullState(this.document, mode, options.highlighted);
       this.syncChrome();
+      this.palette.settle();
       if (options.scrollY !== null && options.scrollY !== undefined) {
         window.scrollTo({ top: options.scrollY, behavior: 'instant' });
       }
-    });
+    };
+    // The page wipe is for in-app navigation; the first render appears as-is.
+    if (this.hasRendered) {
+      this.transitions.run(render);
+    } else {
+      this.hasRendered = true;
+      render();
+    }
   }
 
   private initHints(): void {

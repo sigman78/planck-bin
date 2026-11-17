@@ -204,6 +204,18 @@ export class CommandPalette {
     this.root.dataset.stage = stage;
   }
 
+  /**
+   * Reveal the island and enable state animations. Call once the initial
+   * state has been applied: the forced layout commits that state while
+   * transitions are still off, so only the island's fade-in animates.
+   */
+  settle(): void {
+    if (this.root.hasAttribute('data-settled')) return;
+    void this.root.offsetWidth;
+    this.root.dataset.settled = '';
+    this.root.style.removeProperty('visibility'); // hidden in the markup
+  }
+
   /** Register a callback fired every time the palette opens. */
   onOpened(cb: () => void): void {
     this.openedCallbacks.push(cb);
