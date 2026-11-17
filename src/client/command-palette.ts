@@ -43,7 +43,7 @@ const MENU_TITLES: Record<string, string> = {
 };
 
 const COLLAPSE_FALLBACK_MS = 650;
-const ROOT_PLACEHOLDER = 'Command, :line or /find';
+const ROOT_PLACEHOLDER = 'Command, :line or ?find';
 
 export class CommandPalette {
   private readonly hint: HTMLElement;
@@ -347,9 +347,9 @@ export class CommandPalette {
       const findText = query.text;
       rows.push({
         label: `Find "${findText}"`,
-        hint: '/',
+        hint: '?',
         action: () => {
-          this.setInput(`/${findText}`);
+          this.setInput(`?${findText}`);
           return true;
         },
       });

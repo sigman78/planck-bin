@@ -83,8 +83,8 @@ const COMMANDS: CommandDef[] = [
     id: 'find',
     label: 'Find in paste',
     keywords: ['search'],
-    hint: () => '/text',
-    prefill: '/',
+    hint: () => '?text',
+    prefill: '?',
     available: presenting,
   },
   {

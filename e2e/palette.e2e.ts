@@ -184,7 +184,7 @@ test.describe('Command palette', () => {
       page.evaluate(() => (CSS.highlights as unknown as Map<string, Highlight>).size);
 
     await openPalette(page);
-    await page.locator(S.paletteInput).fill('/foo');
+    await page.locator(S.paletteInput).fill('?foo');
     await expect(page.locator(`${S.paletteSelected} > span`)).toHaveText('Find "foo"');
     await expect(findRow).toHaveText('1/3');
     expect(await highlights()).toBe(2);
@@ -206,7 +206,7 @@ test.describe('Command palette', () => {
     await savePaste(page, 'alpha beta');
 
     await openPalette(page);
-    await page.locator(S.paletteInput).fill('/zzz');
+    await page.locator(S.paletteInput).fill('?zzz');
     await expect(page.locator(`${S.paletteSelected} kbd`)).toHaveText('No matches');
 
     await page.locator(S.paletteInput).fill('beta');
@@ -217,7 +217,7 @@ test.describe('Command palette', () => {
     await start(page);
     await page.locator(S.editor).fill('text');
     await openPalette(page);
-    await page.locator(S.paletteInput).fill('/text');
+    await page.locator(S.paletteInput).fill('?text');
     await expect(page.locator(S.paletteRow)).toHaveText(['Find works while viewing a paste']);
   });
 

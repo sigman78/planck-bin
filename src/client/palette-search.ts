@@ -3,7 +3,7 @@
  *
  * Grammar:
  *   ":N"    go to line N
- *   "/text" find text in the paste
+ *   "?text" find text in the paste
  *   other   fuzzy filter over command labels and keywords
  */
 
@@ -19,7 +19,7 @@ export function parseQuery(raw: string): ParsedQuery {
     const line = /^\d+$/.test(digits) ? parseInt(digits, 10) : NaN;
     return { kind: 'line', line: line > 0 ? line : null };
   }
-  if (raw.trimStart().startsWith('/')) {
+  if (raw.trimStart().startsWith('?')) {
     return { kind: 'find', text: raw.trimStart().slice(1) };
   }
   return { kind: 'filter', text: trimmed };

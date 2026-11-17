@@ -68,7 +68,7 @@ palette. Type to filter commands, then press Enter.
 | ------- | --------------------------------------------------- |
 | `save`  | Fuzzy-filter commands (save, new, copy link, ...)   |
 | `:42`   | Go to line 42                                       |
-| `/text` | Find text in the paste; Enter / Shift+Enter to step |
+| `?text` | Find text in the paste; Enter / Shift+Enter to step |
 
 It also switches the highlighting language and lists recent pastes kept in this browser.
 

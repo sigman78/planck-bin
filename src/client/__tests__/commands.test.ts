@@ -72,7 +72,7 @@ describe('availableCommands', () => {
   it('marks prefill and submenu commands', () => {
     const all = availableCommands(base);
     expect(all.find((c) => c.id === 'goto-line')!.prefill).toBe(':');
-    expect(all.find((c) => c.id === 'find')!.prefill).toBe('/');
+    expect(all.find((c) => c.id === 'find')!.prefill).toBe('?');
     expect(all.find((c) => c.id === 'language')!.submenu).toBe(true);
     expect(all.find((c) => c.id === 'recent')!.submenu).toBe(true);
   });

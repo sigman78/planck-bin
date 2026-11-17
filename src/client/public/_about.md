@@ -18,7 +18,7 @@ Press **Ctrl+/** or click the pill in the top-right corner. Type to filter comma
 press Enter.
 
 - **:42** - go to line 42
-- **/text** - find text in the paste (Enter / Shift+Enter for next / previous)
+- **?text** - find text in the paste (Enter / Shift+Enter for next / previous)
 - **Switch language** - change syntax highlighting
 - **Recent pastes** - pastes you saved or opened in this browser (stored only locally)
 

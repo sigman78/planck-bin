@@ -14,9 +14,13 @@ describe('parseQuery', () => {
   });
 
   it('parses a find query, keeping inner whitespace', () => {
-    expect(parseQuery('/foo')).toEqual({ kind: 'find', text: 'foo' });
-    expect(parseQuery('/a b')).toEqual({ kind: 'find', text: 'a b' });
-    expect(parseQuery('/')).toEqual({ kind: 'find', text: '' });
+    expect(parseQuery('?foo')).toEqual({ kind: 'find', text: 'foo' });
+    expect(parseQuery('?a b')).toEqual({ kind: 'find', text: 'a b' });
+    expect(parseQuery('?')).toEqual({ kind: 'find', text: '' });
+  });
+
+  it('does not treat a leading slash as find', () => {
+    expect(parseQuery('/foo')).toEqual({ kind: 'filter', text: '/foo' });
   });
 
   it('treats anything else as a trimmed filter', () => {
