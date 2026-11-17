@@ -258,7 +258,43 @@
     max-height: 208px; /* 8 rows */
     overflow-y: auto;
     padding: 4px 0;
-    scrollbar-width: thin;
+    overscroll-behavior: contain;
+}
+
+/*
+ * macOS-style scrollbar: a slim rounded thumb inset from the edge, no track,
+ * no arrow buttons. Chromium ignores these pseudo-elements once the standard
+ * scrollbar-width/-color are set, so those are given only to engines without
+ * them (Firefox).
+ */
+.island-list::-webkit-scrollbar {
+    width: 10px;
+}
+
+.island-list::-webkit-scrollbar-track,
+.island-list::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.island-list::-webkit-scrollbar-track {
+    margin: 4px 0; /* keep the thumb off the panel's rounded corner */
+}
+
+.island-list::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 5px;
+    background: var(--color-island-scroll) padding-box;
+}
+
+.island-list:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-island-scroll-hover);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+    .island-list {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-island-scroll) transparent;
+    }
 }
 
 .island-row {

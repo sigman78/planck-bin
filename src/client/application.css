@@ -27,6 +27,8 @@
     --color-island-chip:     rgba(255, 255, 255, 0.08);
     --color-island-row-selected: rgba(211, 54, 130, 0.16);
     --color-island-pulse:    rgba(211, 54, 130, 0.55);
+    --color-island-scroll:   rgba(255, 255, 255, 0.16);
+    --color-island-scroll-hover: rgba(255, 255, 255, 0.3);
     --island-spring: cubic-bezier(0.34, 1.25, 0.64, 1);
 
     /* typography */
