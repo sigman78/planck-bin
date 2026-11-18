@@ -386,14 +386,28 @@
 
 /* --- motion --------------------------------------------------------------- */
 
-/* Keep the island out of the root page wipe; it morphs on its own. */
+/*
+ * Keep the island out of the root page wipe; it morphs on its own through its
+ * width transition. During the page wipe it must look live, not like a
+ * snapshot crossfade: by default the old snapshot is scaled to the new pill's
+ * width (keeping its aspect ratio, so it also grows taller) and fades over the
+ * new one. So: drop the old snapshot, show the live new view unanimated, and
+ * let the group track the live pill's box instead of animating between sizes.
+ */
 #island {
     view-transition-name: island;
 }
 
 ::view-transition-group(island) {
-    animation-duration: 0.3s;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    animation: none;
+}
+
+::view-transition-old(island) {
+    display: none;
+}
+
+::view-transition-new(island) {
+    animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
