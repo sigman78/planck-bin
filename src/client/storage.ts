@@ -52,8 +52,10 @@ export class StorageService {
       return cached;
     }
 
-    // A server-rendered page already carries its document.
-    const data = takeEmbeddedDocument(key) ?? (await this.fetchDocument(key));
+    // A server-rendered page already carries its document, or says it is gone.
+    const embedded = takeEmbeddedDocument(key);
+    if (embedded === 'not-found') throw new Error('Document not found');
+    const data = embedded ?? (await this.fetchDocument(key));
     const doc: LoadResult = {
       content: data.content,
       key: data.key,

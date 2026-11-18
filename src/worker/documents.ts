@@ -8,8 +8,9 @@
 
 import type { Context } from 'hono';
 import type { GetResponse } from '../shared/types';
-import type { Env } from './types';
+import type { Env, StoredDocument } from './types';
 import { createStore } from './storage';
+import { getServerConfig } from './config';
 
 type AppContext = Context<{ Bindings: Env }>;
 
@@ -49,9 +50,31 @@ export async function loadDocument(c: AppContext, key: string): Promise<LoadedDo
   if (!isValidKey(key)) return null;
 
   const stored = await createStore(c.env).get(key);
-  if (!stored) return null;
+  return stored ? fromStored(key, stored) : null;
+}
 
-  countViewInBackground(c, key);
+/**
+ * Like loadDocument, for the server-rendered page: content longer than
+ * `maxChars` stays in D1 (the page falls back to the client fetch), so an
+ * oversized paste is not read just to be discarded. SQLite counts code points
+ * where JS counts UTF-16 units, so callers keep their own length check.
+ */
+export async function loadDocumentWithin(
+  c: AppContext,
+  key: string,
+  maxChars: number
+): Promise<LoadedDocument | 'too-large' | null> {
+  if (isBuiltinPage(key)) {
+    const page = await loadBuiltinPage(c, key);
+    return page && page.content.length > maxChars ? 'too-large' : page;
+  }
+  if (!isValidKey(key)) return null;
+
+  const stored = await createStore(c.env).getWithin(key, maxChars);
+  return stored && stored !== 'too-large' ? fromStored(key, stored) : stored;
+}
+
+function fromStored(key: string, stored: StoredDocument): LoadedDocument {
   return {
     key,
     content: stored.content,
@@ -80,10 +103,17 @@ async function loadBuiltinPage(c: AppContext, key: string): Promise<LoadedDocume
   };
 }
 
-function countViewInBackground(c: AppContext, key: string): void {
+/**
+ * Count a view of a document that is being sent in full: call it only after
+ * the 304 check, so revalidations, HEAD requests and abandoned server renders
+ * never count. Off unless COUNT_VIEWS is set, because each count is a D1 write
+ * and the free plan allows far fewer writes than reads.
+ */
+export function countView(c: AppContext, doc: LoadedDocument): void {
+  if (doc.frozen || c.req.method !== 'GET' || !getServerConfig(c.env).countViews) return;
   const store = createStore(c.env);
   c.executionCtx.waitUntil(
-    store.incrementViews(key).catch((err) => console.error('View count update failed:', err))
+    store.incrementViews(doc.key).catch((err) => console.error('View count update failed:', err))
   );
 }
 

@@ -124,4 +124,30 @@ describe('POST /documents', () => {
     const body = (await res.json()) as { key: string };
     expect(Object.keys(body)).toEqual(['key']);
   });
+
+  describe('storage budget (MAX_STORAGE_MB)', () => {
+    const MB = 1024 * 1024;
+    const post = (vars: Record<string, string>, sizeAfter: number) => {
+      const { env, ctx, writes } = fakeEnv({ vars: vars as never, sizeAfter });
+      const response = api.request('/documents', { method: 'POST', body: 'hello' }, env, ctx);
+      return { response, writes };
+    };
+
+    it('refuses new pastes with 507 once the database reaches the budget', async () => {
+      const { response, writes } = post({ MAX_STORAGE_MB: '5' }, 5 * MB);
+      const res = await response;
+      expect(res.status).toBe(507);
+      expect(writes.some((sql) => /INSERT/.test(sql))).toBe(false);
+    });
+
+    it('accepts pastes below the budget', async () => {
+      expect((await post({ MAX_STORAGE_MB: '5' }, 5 * MB - 1).response).status).toBe(201);
+    });
+
+    it('is off by default and does not query the size', async () => {
+      const { response, writes } = post({}, 100 * 1024 * MB);
+      expect((await response).status).toBe(201);
+      expect(writes).not.toContain('SELECT 1');
+    });
+  });
 });

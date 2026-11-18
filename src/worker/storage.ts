@@ -5,6 +5,13 @@ const CONSONANTS = 'bcdfghjklmnpqrstvwxyz';
 const VOWELS = 'aeiou';
 const MIN_KEY_LENGTH = 6;
 const MAX_CREATE_ATTEMPTS = 10;
+/**
+ * Cleanup deletes in batches so one statement never has to free an unbounded
+ * backlog (rows can be 400 KB each). The batch cap keeps one run well inside
+ * the per-invocation D1 query limit; whatever is left goes on the next run.
+ */
+export const CLEANUP_BATCH_SIZE = 500;
+export const CLEANUP_MAX_BATCHES = 40;
 const URL_SAFE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 /**
@@ -64,6 +71,23 @@ export class D1DocumentStore implements DocumentStore {
       : null;
   }
 
+  async getWithin(key: string, maxChars: number): Promise<StoredDocument | 'too-large' | null> {
+    const now = Math.floor(Date.now() / 1000);
+
+    // content is NOT NULL, so a null here means it is over the limit.
+    const row = await this.db
+      .prepare(
+        `SELECT CASE WHEN LENGTH(content) <= ?3 THEN content END AS content, created_at, expires_at
+         FROM documents WHERE id = ?1 AND (expires_at IS NULL OR expires_at > ?2)`
+      )
+      .bind(key, now, maxChars)
+      .first<{ content: string | null; created_at: number; expires_at: number | null }>();
+
+    if (!row) return null;
+    if (row.content === null) return 'too-large';
+    return { content: row.content, createdAt: row.created_at, expiresAt: row.expires_at };
+  }
+
   async incrementViews(key: string): Promise<void> {
     await this.db.prepare('UPDATE documents SET views = views + 1 WHERE id = ?').bind(key).run();
   }
@@ -95,14 +119,32 @@ export class D1DocumentStore implements DocumentStore {
     throw new Error('Failed to generate unique key after maximum attempts');
   }
 
+  /** Every D1 result reports the database size after the query; SELECT 1 reads no rows. */
+  async sizeBytes(): Promise<number> {
+    return (await this.db.prepare('SELECT 1').run()).meta.size_after;
+  }
+
   async cleanup(): Promise<number> {
     const now = Math.floor(Date.now() / 1000);
-    const result = await this.db
-      .prepare('DELETE FROM documents WHERE expires_at IS NOT NULL AND expires_at <= ?')
-      .bind(now)
-      .run();
+    const statement = this.db.prepare(
+      `DELETE FROM documents WHERE id IN (
+         SELECT id FROM documents WHERE expires_at IS NOT NULL AND expires_at <= ?1 LIMIT ?2
+       )`
+    );
 
-    return result.meta.changes;
+    let deleted = 0;
+    for (let batch = 0; batch < CLEANUP_MAX_BATCHES; batch++) {
+      const { changes } = (await statement.bind(now, CLEANUP_BATCH_SIZE).run()).meta;
+      deleted += changes;
+      // A short batch means nothing expired is left.
+      if (changes < CLEANUP_BATCH_SIZE) return deleted;
+    }
+
+    console.warn(
+      `Cleanup stopped after ${CLEANUP_MAX_BATCHES} batches (${deleted} documents); ` +
+        'the rest is removed on the next run'
+    );
+    return deleted;
   }
 }
 

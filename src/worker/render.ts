@@ -16,7 +16,7 @@
  * caller serves the plain shell, which is the old client-rendered path.
  */
 
-import { EMBEDDED_DOCUMENT_ID, type GetResponse } from '../shared/types';
+import { EMBEDDED_DOCUMENT_ID, type EmbeddedPayload, type GetResponse } from '../shared/types';
 
 /** The empty viewer as it appears in the built shell (src/client/index.html). */
 const VIEWER_A11Y = 'tabindex="0" role="region" aria-label="Paste content"';
@@ -52,9 +52,23 @@ export function renderDocumentPage(shell: string, input: RenderInput): string | 
   if (withViewer === null) return null;
   html = withViewer;
 
+  return embed(html, doc);
+}
+
+/**
+ * The shell for a key the worker looked up and did not find: unchanged except
+ * for a not-found marker, so the client shows "not found" without a second
+ * lookup. Served with status 404.
+ */
+export function renderNotFoundPage(shell: string, key: string): string | null {
+  return embed(shell, { key, notFound: true });
+}
+
+/** Insert the payload as inert JSON just before </body>. */
+function embed(html: string, payload: EmbeddedPayload): string | null {
   const data =
     `<script type="application/json" id="${EMBEDDED_DOCUMENT_ID}">` +
-    serializeJsonForScript(doc) +
+    serializeJsonForScript(payload) +
     `</script>${BODY_CLOSE}`;
   return replaceOnce(html, BODY_CLOSE, data);
 }

@@ -16,12 +16,18 @@ export interface FakeEnvOptions {
   vars?: Partial<Env>;
   readAllowed?: boolean;
   dbError?: boolean;
+  /** Database size that every run() reports (meta.size_after). */
+  sizeAfter?: number;
 }
 
 export interface FakeEnv {
   env: Env;
   /** Keys looked up with SELECT, in order. */
   lookups: string[];
+  /** Characters of content returned by SELECTs (what left the database). */
+  contentChars: () => number;
+  /** SQL of every run() call (writes, plus SELECT 1 size checks), in order. */
+  writes: string[];
   ctx: ExecutionContext;
 }
 
@@ -29,24 +35,32 @@ export function fakeEnv(options: FakeEnvOptions = {}): FakeEnv {
   const rows = options.rows ?? {};
   const assets = options.assets ?? {};
   const lookups: string[] = [];
+  const writes: string[] = [];
+  let contentChars = 0;
+
+  const statement = (sql: string, args: unknown[]) => ({
+    async first() {
+      if (options.dbError) throw new Error('D1 unavailable');
+      const key = String(args[0]);
+      lookups.push(key);
+      if (!/^\s*SELECT/i.test(sql)) return null;
+      const row = rows[key];
+      if (!row) return null;
+      // getWithin: CASE WHEN LENGTH(content) <= ?3 THEN content END
+      const limited = /LENGTH\(content\) <= \?3/.test(sql);
+      const content = limited && row.content.length > Number(args[2]) ? null : row.content;
+      contentChars += content?.length ?? 0;
+      return { ...row, content };
+    },
+    async run() {
+      writes.push(sql);
+      return { meta: { changes: 1, size_after: options.sizeAfter ?? 0 } };
+    },
+  });
 
   const db = {
     prepare(sql: string) {
-      return {
-        bind(...args: unknown[]) {
-          return {
-            async first() {
-              if (options.dbError) throw new Error('D1 unavailable');
-              const key = String(args[0]);
-              lookups.push(key);
-              return /^\s*SELECT/i.test(sql) ? (rows[key] ?? null) : null;
-            },
-            async run() {
-              return { meta: { changes: 1 } };
-            },
-          };
-        },
-      };
+      return { ...statement(sql, []), bind: (...args: unknown[]) => statement(sql, args) };
     },
   };
 
@@ -80,10 +94,12 @@ export function fakeEnv(options: FakeEnvOptions = {}): FakeEnv {
   } as unknown as Env;
 
   const ctx = {
-    waitUntil() {},
+    waitUntil(promise: Promise<unknown>) {
+      void promise;
+    },
     passThroughOnException() {},
     props: {},
   } as unknown as ExecutionContext;
 
-  return { env, lookups, ctx };
+  return { env, lookups, writes, ctx, contentChars: () => contentChars };
 }

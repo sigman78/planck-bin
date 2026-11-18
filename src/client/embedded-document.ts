@@ -1,17 +1,29 @@
 /**
  * The first document, when the worker rendered the page (SERVER_RENDER):
- * a GetResponse in <script type="application/json" id="embedded-document">.
+ * an EmbeddedPayload in <script type="application/json" id="embedded-document">,
+ * either the GetResponse or a not-found marker for a key that does not exist.
  *
  * Read once and consumed by the first load of the matching key; any later
  * navigation fetches /documents as usual. Without the element (plain shell,
  * vite dev) everything behaves as before.
  */
 
-import { EMBEDDED_DOCUMENT_ID, type GetResponse } from '../shared/types';
+import { EMBEDDED_DOCUMENT_ID, type EmbeddedPayload, type GetResponse } from '../shared/types';
 
-let embedded: GetResponse | null | undefined;
+let embedded: EmbeddedPayload | null | undefined;
 
-function read(): GetResponse | null {
+function isPayload(data: unknown): data is EmbeddedPayload {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Partial<GetResponse> & { notFound?: unknown };
+  if (typeof d.key !== 'string') return false;
+  return d.notFound === true || typeof d.content === 'string';
+}
+
+function isNotFound(payload: EmbeddedPayload): payload is { key: string; notFound: true } {
+  return 'notFound' in payload && payload.notFound === true;
+}
+
+function read(): EmbeddedPayload | null {
   if (embedded !== undefined) return embedded;
   embedded = null;
 
@@ -21,14 +33,7 @@ function read(): GetResponse | null {
 
   try {
     const data: unknown = JSON.parse(el.textContent ?? '');
-    if (
-      data &&
-      typeof data === 'object' &&
-      typeof (data as GetResponse).key === 'string' &&
-      typeof (data as GetResponse).content === 'string'
-    ) {
-      embedded = data as GetResponse;
-    }
+    if (isPayload(data)) embedded = data;
   } catch (err) {
     console.error('Ignoring malformed embedded document:', err);
   }
@@ -37,12 +42,18 @@ function read(): GetResponse | null {
 
 /** Whether the page carries the document for `key` (not yet consumed). */
 export function hasEmbeddedDocument(key: string): boolean {
-  return read()?.key === key;
+  const payload = read();
+  return payload?.key === key && !isNotFound(payload);
 }
 
-/** The embedded document for `key`, once; null afterwards or for another key. */
-export function takeEmbeddedDocument(key: string): GetResponse | null {
-  const doc = read();
+/**
+ * The embedded document for `key`, once: the document, 'not-found' when the
+ * worker confirmed the key does not exist, or null (nothing embedded for this
+ * key, or already consumed).
+ */
+export function takeEmbeddedDocument(key: string): GetResponse | 'not-found' | null {
+  const payload = read();
   embedded = null;
-  return doc?.key === key ? doc : null;
+  if (payload?.key !== key) return null;
+  return isNotFound(payload) ? 'not-found' : payload;
 }

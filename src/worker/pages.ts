@@ -8,8 +8,8 @@
 import type { Context } from 'hono';
 import type { Env } from './types';
 import { getServerConfig } from './config';
-import { loadDocument, toGetResponse } from './documents';
-import { renderDocumentPage } from './render';
+import { countView, loadDocumentWithin, toGetResponse } from './documents';
+import { renderDocumentPage, renderNotFoundPage } from './render';
 import { isReadAllowed } from './request-policy';
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -86,24 +86,34 @@ async function renderRoute(
   options: PageOptions
 ): Promise<Response | null> {
   try {
+    // Limit before validating the key on purpose: invalid-key probes also spend
+    // tokens, which slows scrapers that enumerate paste URLs.
     if (!(await isReadAllowed(c))) return null;
-    const doc = await loadDocument(c, route.key);
-    if (!doc || doc.content.length > MAX_RENDER_CHARS) return null;
+    const doc = await loadDocumentWithin(c, route.key, MAX_RENDER_CHARS);
+    // Too large (by D1's code-point count, or by the JS UTF-16 count, which can
+    // be higher): the plain shell, and the client fetches the paste.
+    if (doc === 'too-large' || (doc && doc.content.length > MAX_RENDER_CHARS)) return null;
 
-    const html = renderDocumentPage(await shell.clone().text(), {
-      appName: options.appName,
-      displayName: route.displayName,
-      doc: toGetResponse(doc),
-    });
+    const shellHtml = await shell.clone().text();
+    // A confirmed miss (rate limits and errors never get here): a 404 page the
+    // client recognizes, instead of a 200 shell and a second lookup.
+    const html = doc
+      ? renderDocumentPage(shellHtml, {
+          appName: options.appName,
+          displayName: route.displayName,
+          doc: toGetResponse(doc),
+        })
+      : renderNotFoundPage(shellHtml, route.key);
     if (html === null) {
       console.error('Server render: shell anchors not found; serving the plain shell');
       return null;
     }
+    if (doc) countView(c, doc);
 
     // Fresh headers: the shell's ETag/Content-Length do not describe this body,
     // and the page references hashed assets, so it must not outlive a deploy.
     return new Response(html, {
-      status: 200,
+      status: doc ? 200 : 404,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache',

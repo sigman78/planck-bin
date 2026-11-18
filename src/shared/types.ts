@@ -22,7 +22,15 @@ export interface GetResponse {
 
 /**
  * Element id of the first document the worker embeds into the page it renders
- * (a <script type="application/json"> holding a GetResponse), so the client
- * can skip the initial /documents fetch.
+ * (a <script type="application/json"> holding an EmbeddedPayload), so the
+ * client can skip the initial /documents fetch.
  */
 export const EMBEDDED_DOCUMENT_ID = 'embedded-document';
+
+/** Embedded instead of a document when the worker confirmed the key does not exist. */
+export interface EmbeddedNotFound {
+  key: string;
+  notFound: true;
+}
+
+export type EmbeddedPayload = GetResponse | EmbeddedNotFound;

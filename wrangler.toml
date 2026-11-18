@@ -32,6 +32,8 @@ KEY_STRATEGY = "pronounceable"             # pronounceable | random | uuid
 DEFAULT_EXPIRE_DAYS = "30"
 BROWSER_CACHE_MAX_AGE = "3600"        # browser Cache-Control max-age in seconds (capped at paste expiry); "0" to disable
 SERVER_RENDER = "true"                # render paste pages on the worker; "false" = client-only rendering
+COUNT_VIEWS = "false"                 # "true" = count views in D1 (one database write per paste read)
+MAX_STORAGE_MB = "0"                  # refuse new pastes (507) once the database reaches this size; "0" = no limit
 
 # Coarse abuse protection. Namespace IDs only need to be unique within this account.
 [[ratelimits]]

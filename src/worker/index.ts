@@ -25,14 +25,15 @@ app.get('*', createPageHandler({ appName: appConfig.appName }));
 export default {
   fetch: app.fetch,
 
-  // Cron trigger (see wrangler.toml [triggers]) purges expired documents
-  async scheduled(_controller, env, ctx) {
-    const store = createStore(env);
-    ctx.waitUntil(
-      store
-        .cleanup()
-        .then((deleted) => console.log(`Cleanup: removed ${deleted} expired documents`))
-        .catch((err) => console.error('Cleanup failed:', err))
-    );
+  // Cron trigger (see wrangler.toml [triggers]) purges expired documents.
+  // Awaited rather than handed to waitUntil: cleanup runs up to 40 batched
+  // queries and should get the scheduled handler's full time allowance.
+  async scheduled(_controller, env) {
+    try {
+      const deleted = await createStore(env).cleanup();
+      console.log(`Cleanup: removed ${deleted} expired documents`);
+    } catch (err) {
+      console.error('Cleanup failed:', err);
+    }
   },
 } satisfies ExportedHandler<Env>;

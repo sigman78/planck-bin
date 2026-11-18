@@ -27,6 +27,7 @@ function testApp() {
   app.get('/ok', (c) => c.text('ok'));
   app.get('/redirect', () => Response.redirect('https://example.com'));
   app.get('/documents/:id', (c) => c.text(c.req.param('id')));
+  app.get('/raw/:id', (c) => c.text(c.req.param('id')));
   app.post('/documents', async (c) => c.text(await c.req.text()));
   return app;
 }
@@ -95,4 +96,19 @@ describe('request policy', () => {
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('60');
   });
+
+  it.each(['/documents/known-key', '/raw/known-key'])(
+    'applies the read limiter to HEAD %s (it runs the GET handler)',
+    async (path) => {
+      const readLimiter = limiter(false);
+      const response = await testApp().request(
+        `https://haste.example${path}`,
+        { method: 'HEAD' },
+        testEnv({ READ_RATE_LIMITER: readLimiter })
+      );
+
+      expect(response.status).toBe(429);
+      expect(readLimiter.limit).toHaveBeenCalledTimes(1);
+    }
+  );
 });

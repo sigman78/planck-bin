@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { setupMockApi } from './helpers/mock-api';
 import { S } from './helpers/selectors';
 import { expectCommand } from './helpers/palette';
-import { renderDocumentPage } from '../src/worker/render';
+import { renderDocumentPage, renderNotFoundPage } from '../src/worker/render';
 import type { GetResponse } from '../src/shared/types';
 
 /**
@@ -19,6 +19,19 @@ async function serveRendered(page: Page, path: string, doc: GetResponse) {
     const html = renderDocumentPage(shell, { appName: 'Haste', displayName: path.slice(1), doc });
     expect(html, 'dev shell lost a render anchor').not.toBeNull();
     await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html! });
+  });
+}
+
+/** Answer the navigation with the worker's 404 page for a confirmed-missing key. */
+async function serveNotFound(page: Page, path: string, key: string) {
+  await page.route(`**${path}`, async (route) => {
+    if (route.request().resourceType() !== 'document') return route.continue();
+    const shell = await (
+      await route.fetch({ url: new URL('/', route.request().url()).href })
+    ).text();
+    const html = renderNotFoundPage(shell, key);
+    expect(html, 'dev shell lost a render anchor').not.toBeNull();
+    await route.fulfill({ status: 404, contentType: 'text/html; charset=utf-8', body: html! });
   });
 }
 
@@ -95,5 +108,30 @@ test.describe('Server-rendered paste page', () => {
     await expectCommand(page, 'Duplicate & edit', false);
     const recents = await page.evaluate(() => JSON.stringify(localStorage));
     expect(recents).not.toContain('about');
+  });
+
+  test('a missing paste shows "not found" without a second lookup', async ({ page }) => {
+    await setupMockApi(page);
+    const seen = await watch(page);
+    await serveNotFound(page, '/gone-paste.js', 'gone-paste');
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem(
+        'haste-recent',
+        JSON.stringify([
+          { key: 'gone-paste', path: '/gone-paste.js', preview: 'x', at: Date.now() },
+        ])
+      );
+    });
+
+    await page.goto('/gone-paste.js');
+    await expect(page.locator(S.toast)).toHaveText('Document not found.');
+    await expect(page.locator(S.island)).toHaveAttribute('data-mode', 'editing');
+    expect(new URL(page.url()).pathname).toBe('/');
+    expect(seen.fetches).toEqual([]);
+    // The confirmed miss also drops the stale entry from the recent list.
+    const recents = await page.evaluate(() => localStorage.getItem('haste-recent') ?? '');
+    expect(recents).not.toContain('gone-paste');
   });
 });

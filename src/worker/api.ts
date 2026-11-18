@@ -8,7 +8,7 @@ import type { Env } from './types';
 import type { SaveResponse } from '../shared/types';
 import { createStore } from './storage';
 import { getServerConfig } from './config';
-import { loadDocument, toGetResponse, type LoadedDocument } from './documents';
+import { countView, loadDocument, toGetResponse, type LoadedDocument } from './documents';
 import { etagMatches, isJsonContentType } from './http';
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -44,6 +44,7 @@ async function serveDocument(
 
     applyDocumentCacheHeaders(c, doc);
     if (etagMatches(c.req.header('if-none-match'), doc.etag)) return c.body(null, 304);
+    countView(c, doc);
     return send(doc);
   } catch (error) {
     console.error('Error retrieving document:', error);
@@ -77,6 +78,11 @@ api.post('/documents', async (c) => {
   const config = getServerConfig(c.env);
 
   try {
+    // Checked before reading the body: a full database refuses every paste.
+    if (config.maxStorageBytes > 0 && (await store.sizeBytes()) >= config.maxStorageBytes) {
+      return c.json({ message: 'Storage is full; try again later' }, 507);
+    }
+
     let content: string;
 
     if (isJsonContentType(c.req.header('content-type'))) {

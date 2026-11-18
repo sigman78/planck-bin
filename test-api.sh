@@ -149,7 +149,7 @@ echo ""
 
 echo "Test 7: Verify All Documents in Database"
 echo "------------------------------"
-db_count=$(pnpm exec wrangler d1 execute haste-db --local --command "SELECT COUNT(*) as count FROM documents" 2>/dev/null | grep -o '"count":[0-9]*' | cut -d':' -f2)
+db_count=$(pnpm exec wrangler d1 execute haste-db --local --command "SELECT COUNT(*) as count FROM documents" 2>/dev/null | grep -oE '"count": *[0-9]+' | tr -dc '0-9')
 echo "Total documents in database: $db_count"
 if [ "$db_count" -ge 4 ]; then
     echo -e "${GREEN}✓${NC} All documents persisted to database"
@@ -186,17 +186,17 @@ else
 fi
 echo ""
 
-echo "Test 10: View Count Increment"
+echo "Test 10: Reads Do Not Write (COUNT_VIEWS off, the wrangler.toml default)"
 echo "------------------------------"
-# Get document twice and check if view count increases
+# Each counted view is a D1 write; with COUNT_VIEWS off, reads must leave views at 0
 first_view=$(curl -s "$BASE_URL/documents/$key" > /dev/null)
 second_view=$(curl -s "$BASE_URL/documents/$key" > /dev/null)
-view_count=$(pnpm exec wrangler d1 execute haste-db --local --command "SELECT views FROM documents WHERE id='$key'" 2>/dev/null | grep -o '"views":[0-9]*' | cut -d':' -f2)
-if [ "$view_count" -ge 2 ]; then
-    echo -e "${GREEN}✓${NC} View count incremented correctly (views: $view_count)"
+view_count=$(pnpm exec wrangler d1 execute haste-db --local --command "SELECT views FROM documents WHERE id='$key'" 2>/dev/null | grep -oE '"views": *[0-9]+' | tr -dc '0-9')
+if [ "$view_count" = "0" ]; then
+    echo -e "${GREEN}✓${NC} Reads left the view count untouched (views: $view_count)"
     ((TESTS_PASSED++))
 else
-    echo -e "${RED}✗${NC} View count not incrementing (views: $view_count)"
+    echo -e "${RED}✗${NC} Expected views to stay 0 with COUNT_VIEWS off (views: $view_count)"
     ((TESTS_FAILED++))
 fi
 echo ""

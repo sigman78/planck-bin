@@ -3,26 +3,12 @@ import { bodyLimit } from 'hono/body-limit';
 import { getServerConfig } from './config';
 import { isJsonContentType } from './http';
 import type { Env } from './types';
+import { SECURITY_HEADERS } from '../shared/security-headers';
 
 type App = { Bindings: Env };
 
 const JSON_ENCODING_EXPANSION = 6;
 const JSON_ENVELOPE_BYTES = 1024;
-
-const SECURITY_HEADERS = {
-  'Content-Security-Policy':
-    "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
-    "form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-    "img-src 'self' data:; connect-src 'self'",
-  'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Resource-Policy': 'same-origin',
-  'Origin-Agent-Cluster': '?1',
-  'Permissions-Policy': 'camera=(), geolocation=(), microphone=()',
-  'Referrer-Policy': 'no-referrer',
-  'Strict-Transport-Security': 'max-age=15552000; includeSubDomains',
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-} as const;
 
 const addSecurityHeaders: MiddlewareHandler<App> = async (c, next) => {
   await next();
@@ -40,8 +26,9 @@ function isDocumentWrite(path: string, method: string): boolean {
   return method === 'POST' && path === '/documents';
 }
 
+/** HEAD runs the GET handler (and its D1 read), so it is limited like GET. */
 function isDocumentRead(path: string, method: string): boolean {
-  return method === 'GET' && /^\/(?:documents|raw)\/[^/]+$/.test(path);
+  return (method === 'GET' || method === 'HEAD') && /^\/(?:documents|raw)\/[^/]+$/.test(path);
 }
 
 function isCrossOriginBrowserWrite(request: Request): boolean {

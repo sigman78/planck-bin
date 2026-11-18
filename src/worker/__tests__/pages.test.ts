@@ -25,9 +25,9 @@ app.get('*', createPageHandler({ appName: 'Haste' }));
 const HTML = { headers: { Accept: 'text/html,application/xhtml+xml,*/*;q=0.8' } };
 
 async function page(path: string, options: FakeEnvOptions = {}, init: RequestInit = HTML) {
-  const { env, lookups, ctx } = fakeEnv({ ...base, ...options });
+  const { env, lookups, ctx, contentChars } = fakeEnv({ ...base, ...options });
   const res = await app.request(path, init, env, ctx);
-  return { res, html: await res.text(), lookups };
+  return { res, html: await res.text(), lookups, contentChars: contentChars() };
 }
 
 describe('parseDocumentRoute', () => {
@@ -58,14 +58,33 @@ describe('page handler', () => {
   });
 
   it.each([
-    ['a missing paste', '/nosuchkey', {}],
-    ['a key that cannot exist', '/a%21b', {}],
     ['a nested path', '/tavelu-hasoq.c/fork', {}],
     ['a rate-limited client', '/tavelu-hasoq', { readAllowed: false }],
     ['a storage failure', '/tavelu-hasoq', { dbError: true }],
     ['a paste over the render size cap', '/big', {}],
   ])('falls back to the plain shell for %s', async (_name, path, options) => {
     const { res, html } = await page(path, options);
+    expect(res.status).toBe(200);
+    expect(html).toBe(SHELL);
+  });
+
+  it.each([
+    ['a missing paste', '/nosuchkey.js', 'nosuchkey', ['nosuchkey']],
+    // Invalid keys never reach D1, but are just as certainly not there.
+    ['a key that cannot exist', '/a%21b', 'a%21b', []],
+  ])('answers %s with a 404 page carrying a not-found marker', async (_n, path, key, seen) => {
+    const { res, html, lookups } = await page(path);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('Cache-Control')).toBe('no-cache');
+    expect(lookups).toEqual(seen);
+    const marker = `<script type="application/json" id="${EMBEDDED_DOCUMENT_ID}">`;
+    expect(html).toBe(
+      SHELL.replace('</body>', `${marker}{"key":"${key}","notFound":true}</script></body>`)
+    );
+  });
+
+  it('serves a missing paste as the plain shell when the flag is off', async () => {
+    const { res, html } = await page('/nosuchkey', { vars: {} });
     expect(res.status).toBe(200);
     expect(html).toBe(SHELL);
   });
@@ -91,5 +110,15 @@ describe('page handler', () => {
   it('serves the root as the plain shell', async () => {
     const { html } = await page('/');
     expect(html).toBe(SHELL);
+  });
+});
+
+describe('oversized pastes', () => {
+  it('leave their content in the database and get the plain shell', async () => {
+    const { res, html, lookups, contentChars } = await page('/big.txt');
+    expect(res.status).toBe(200);
+    expect(html).toBe(SHELL);
+    expect(lookups).toEqual(['big']);
+    expect(contentChars).toBe(0);
   });
 });
