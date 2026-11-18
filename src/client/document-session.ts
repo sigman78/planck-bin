@@ -1,5 +1,10 @@
 import { StorageService } from './storage';
-import { highlightContent, getExtensionForLanguage, resolveLanguage } from './highlight-config';
+import {
+  highlightContent,
+  getExtensionForLanguage,
+  resolveLanguage,
+  type Highlighted,
+} from './highlight-config';
 import { buildPath, type ParsedPath } from './path-utils';
 
 export interface DocumentRenderResult {
@@ -9,7 +14,7 @@ export interface DocumentRenderResult {
     language?: string;
     frozen?: boolean;
   };
-  highlighted?: string;
+  highlighted?: Highlighted;
   canonicalPath: string;
 }
 

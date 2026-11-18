@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { setupMockApi } from './helpers/mock-api';
 import { S } from './helpers/selectors';
+import { syntaxHighlightCount, syntaxTexts } from './helpers/syntax';
 import { expectCommand } from './helpers/palette';
 import { renderDocumentPage, renderNotFoundPage } from '../src/worker/render';
 import type { GetResponse } from '../src/shared/types';
@@ -68,7 +69,9 @@ test.describe('Server-rendered paste page', () => {
 
     await page.goto('/tavelu-hasoq.js');
     await expect(page.locator(S.island)).toHaveAttribute('data-mode', 'presenting');
-    await expect(page.locator(`${S.viewer} code .hljs-keyword`).first()).toHaveText('const');
+    await expect.poll(() => syntaxTexts(page, 'keyword')).toContain('const');
+    // The server-rendered text node is kept: no per-token elements.
+    expect(await page.locator(`${S.viewer} code`).evaluate((el) => el.childNodes.length)).toBe(1);
     await expect(page.locator(`${S.viewer} code`)).toHaveText(HOSTILE);
     await expect(page.locator(`${S.viewer} b`)).toHaveCount(0);
 
@@ -84,7 +87,7 @@ test.describe('Server-rendered paste page', () => {
 
     await page.goto('/tavelu-hasoq.txt');
     await expect(page.locator(`${S.viewer} code`)).toHaveText(HOSTILE);
-    await expect(page.locator(`${S.viewer} code .hljs-keyword`)).toHaveCount(0);
+    expect(await syntaxHighlightCount(page)).toBe(0);
   });
 
   test('a later navigation fetches as usual', async ({ page }) => {

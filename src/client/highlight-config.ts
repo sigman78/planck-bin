@@ -3,6 +3,8 @@
 // This reduces bundle size significantly compared to importing all languages
 
 import hljs from 'highlight.js/lib/core';
+import type { HighlightResult as HljsResult } from 'highlight.js';
+import { extractSpans, type TokenSpans } from './syntax-highlights';
 
 // Import only commonly used languages
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -231,11 +233,35 @@ export function listLanguages(): LanguageOption[] {
 }
 
 /**
+ * Highlighted paste: the HTML output (fallback for browsers without the
+ * Custom Highlight API) and the same tokens as ranges by role (null when the
+ * token tree could not be mapped). Plain text has no spans to paint.
+ */
+export interface Highlighted {
+  html: string;
+  spans: TokenSpans | null;
+}
+
+/**
  * Result of highlighting operation
  */
 export interface HighlightResult {
-  highlighted: string;
+  highlighted: Highlighted;
   language: string | undefined;
+}
+
+const plain = (content: string): Highlighted => ({ html: escapeHtml(content), spans: new Map() });
+
+function fromResult(content: string, result: HljsResult): Highlighted {
+  return {
+    html: result.value,
+    // Internal token tree (pinned highlight.js version, see syntax-highlights.ts).
+    spans: extractSpans(
+      (result._emitter as unknown as { root?: unknown } | undefined)?.root,
+      content,
+      result.language
+    ),
+  };
 }
 
 /**
@@ -246,10 +272,7 @@ export interface HighlightResult {
 export function highlightContent(content: string, language?: string): HighlightResult {
   // Plain text - no highlighting needed
   if (language === 'txt' || language === '') {
-    return {
-      highlighted: escapeHtml(content),
-      language: undefined,
-    };
+    return { highlighted: plain(content), language: undefined };
   }
 
   const canUseLanguage = language && hljs.getLanguage(language);
@@ -259,27 +282,14 @@ export function highlightContent(content: string, language?: string): HighlightR
   if (
     content.length > (canUseLanguage ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)
   ) {
-    return {
-      highlighted: escapeHtml(content),
-      language: canUseLanguage ? language : undefined,
-    };
+    return { highlighted: plain(content), language: canUseLanguage ? language : undefined };
   }
 
-  // Language specified - use it directly
-  if (canUseLanguage) {
-    const result = hljs.highlight(content, { language });
-    return {
-      highlighted: result.value,
-      language: result.language,
-    };
-  }
-
-  // No language specified - auto-detect
-  const result = hljs.highlightAuto(content);
-  return {
-    highlighted: result.value,
-    language: result.language,
-  };
+  // Language specified - use it directly; otherwise auto-detect
+  const result = canUseLanguage
+    ? hljs.highlight(content, { language })
+    : hljs.highlightAuto(content);
+  return { highlighted: fromResult(content, result), language: result.language };
 }
 
 /**

@@ -17,8 +17,8 @@ describe('highlight policy', () => {
     const content = '<script>alert(1)</script>' + 'x'.repeat(MAX_AUTO_HIGHLIGHT_LENGTH);
     const result = highlightContent(content);
 
-    expect(result.highlighted).toContain('&lt;script&gt;');
-    expect(result.highlighted).not.toContain('<script>');
+    expect(result.highlighted.html).toContain('&lt;script&gt;');
+    expect(result.highlighted.html).not.toContain('<script>');
     expect(result.language).toBeUndefined();
   });
 
@@ -26,8 +26,8 @@ describe('highlight policy', () => {
     const content = '<img onerror=alert(1)>' + 'x'.repeat(MAX_EXPLICIT_HIGHLIGHT_LENGTH);
     const result = highlightContent(content, 'xml');
 
-    expect(result.highlighted).toContain('&lt;img');
-    expect(result.highlighted).not.toContain('<img');
+    expect(result.highlighted.html).toContain('&lt;img');
+    expect(result.highlighted.html).not.toContain('<img');
     expect(result.language).toBe('xml');
   });
 });

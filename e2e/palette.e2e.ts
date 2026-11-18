@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { setupMockApi, type MockStore } from './helpers/mock-api';
 import { S } from './helpers/selectors';
+import { syntaxHighlightCount, syntaxTexts } from './helpers/syntax';
 import { openPalette, closePalette, paletteLabel, runCommand } from './helpers/palette';
 
 async function savePaste(page: Page, content: string): Promise<void> {
@@ -373,7 +374,12 @@ test.describe('Command palette', () => {
     await savePaste(page, 'foo one\nbar foo\nFOO end');
     const findRow = page.locator(`${S.paletteSelected} kbd`);
     const highlights = () =>
-      page.evaluate(() => (CSS.highlights as unknown as Map<string, Highlight>).size);
+      page.evaluate(
+        () =>
+          [...(CSS.highlights as unknown as Map<string, Highlight>).keys()].filter((name) =>
+            name.startsWith('haste-find')
+          ).length
+      );
 
     await openPalette(page);
     await page.locator(S.paletteInput).fill('?foo');
@@ -423,13 +429,14 @@ test.describe('Command palette', () => {
     await expect(page.locator(`${S.paletteSelected} > span`)).toHaveText('Python');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/testkey0\.py$/);
-    await expect(page.locator('#viewer .hljs-keyword').first()).toBeVisible();
+    await expect.poll(() => syntaxTexts(page, 'keyword')).toContain('def');
 
     await runCommand(page, 'Switch language');
     await page.locator(S.paletteInput).fill('Plain text');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/testkey0\.txt$/);
     await expect(page.locator('#viewer [class^="hljs-"]')).toHaveCount(0);
+    await expect.poll(() => syntaxHighlightCount(page)).toBe(0);
     await expect(page.locator(S.viewer)).toContainText('def greet(name):');
 
     // The chosen language must survive a reload / shared link.

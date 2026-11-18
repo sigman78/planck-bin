@@ -135,8 +135,13 @@ export class ViewerFind {
     if (!current) return;
 
     if (supportsHighlights()) {
-      highlightRegistry().set(HL_ALL, new Highlight(...this.ranges));
-      highlightRegistry().set(HL_CURRENT, new Highlight(current));
+      // Above the syntax highlights (priority 0), which also set colors.
+      const all = new Highlight(...this.ranges);
+      const now = new Highlight(current);
+      all.priority = 1;
+      now.priority = 2;
+      highlightRegistry().set(HL_ALL, all);
+      highlightRegistry().set(HL_CURRENT, now);
     } else {
       const selection = window.getSelection();
       selection?.removeAllRanges();

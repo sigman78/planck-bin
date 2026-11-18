@@ -14,7 +14,12 @@ import { CommandPalette } from './command-palette';
 import { TransitionManager } from './transition-manager';
 import appConfig from './config';
 import { buildPath, parsePath, type ParsedPath } from './path-utils';
-import { getExtensionForLanguage, highlightContent, listLanguages } from './highlight-config';
+import {
+  getExtensionForLanguage,
+  highlightContent,
+  listLanguages,
+  type Highlighted,
+} from './highlight-config';
 import { hasEmbeddedDocument } from './embedded-document';
 import type { PaletteItem } from './commands';
 import { DocumentSession } from './document-session';
@@ -294,7 +299,7 @@ export class AppController {
 
   private transitionToView(
     mode: ViewMode,
-    options: { highlighted?: string; scrollY?: number | null; animate?: boolean } = {}
+    options: { highlighted?: Highlighted; scrollY?: number | null; animate?: boolean } = {}
   ): void {
     this.viewMode = mode;
     // Close first: renderFullState may move focus into the editor.

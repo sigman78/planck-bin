@@ -13,6 +13,8 @@
 
 import type { Paste } from './paste';
 import { ViewerFind, type FindStatus } from './viewer-find';
+import type { Highlighted } from './highlight-config';
+import { clearSyntax, paintSyntax, supportsHighlights } from './syntax-highlights';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
@@ -155,18 +157,19 @@ export class ViewManager {
   /**
    * Render full state including editor (for loading/reset)
    */
-  renderFullState(state: Paste, mode: 'editing' | 'presenting', highlightedContent?: string): void {
+  renderFullState(state: Paste, mode: 'editing' | 'presenting', highlighted?: Highlighted): void {
     this.finder.clear();
+    clearSyntax();
     this.editor.classList.remove('is-loading');
     this.viewer.classList.remove('is-loading');
 
-    if (mode === 'presenting' && highlightedContent) {
+    if (mode === 'presenting' && highlighted) {
       // Present mode: show viewer, hide editor
       this.editor.value = '';
       this.editor.style.display = 'none';
       this.viewer.style.display = 'block';
-      this.viewerCode.innerHTML = highlightedContent;
-      const lineCount = (highlightedContent.match(/\n/g) ?? []).length + 1;
+      this.renderViewerContent(state.content, highlighted);
+      const lineCount = (state.content.match(/\n/g) ?? []).length + 1;
       this.updateGutter(lineCount, true);
       // this.resetLineHighlight();
       this.highlightAnchorLine();
@@ -184,7 +187,26 @@ export class ViewManager {
     this.renderUIState(state);
   }
 
+  /**
+   * Fill the viewer. With the Custom Highlight API the code element holds one
+   * plain text node (the server-rendered one is kept when it matches) and the
+   * tokens are painted as ranges; otherwise the hljs HTML is used.
+   */
+  private renderViewerContent(content: string, highlighted: Highlighted): void {
+    if (!supportsHighlights() || highlighted.spans === null) {
+      this.viewerCode.innerHTML = highlighted.html;
+      return;
+    }
+    const first = this.viewerCode.firstChild;
+    const reuse =
+      first instanceof Text && first === this.viewerCode.lastChild && first.data === content;
+    if (!reuse) this.viewerCode.textContent = content;
+    const text = this.viewerCode.firstChild;
+    if (text instanceof Text) paintSyntax(text, highlighted.spans);
+  }
+
   renderLoadingState(): void {
+    clearSyntax();
     this.editor.style.display = 'none';
     this.viewer.style.display = 'block';
     this.viewer.classList.add('is-loading');

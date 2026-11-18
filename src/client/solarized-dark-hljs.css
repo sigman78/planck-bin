@@ -162,3 +162,48 @@ code.hljs {
 .hljs-emphasis {
   font-style: italic;
 }
+
+/*
+  Custom Highlight API variant (syntax-highlights.ts): the same roles as the
+  class rules above, painted as ranges over a plain text node. Roles are
+  resolved in script, so contextual rules (.hljs-meta .hljs-keyword,
+  .diff .hljs-meta) map to their own role here. ::highlight() cannot set
+  font-weight/font-style or border-radius, so strong/emphasis and the
+  comment corner rounding have no equivalent.
+*/
+::highlight(syn-comment) {
+  color: var(--color-comment);
+  background-color: var(--color-comment-bg);
+}
+
+::highlight(syn-keyword) {
+  color: var(--sol-yellow);
+}
+
+::highlight(syn-punct) {
+  color: var(--color-punctuation);
+}
+
+::highlight(syn-constant) {
+  color: var(--color-constant);
+}
+
+::highlight(syn-definition) {
+  color: var(--color-definition);
+}
+
+::highlight(syn-special) {
+  color: var(--color-special);
+}
+
+::highlight(syn-diff) {
+  color: var(--color-diff);
+}
+
+::highlight(syn-deletion) {
+  color: var(--color-deletion);
+}
+
+::highlight(syn-addition) {
+  color: var(--color-addition);
+}
