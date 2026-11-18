@@ -1,5 +1,5 @@
 import hljs, { highlightContent } from '../highlight-config';
-import { RangeEmitter, runsFromResult, type ScopeNode } from '../syntax-highlights';
+import { RangeEmitter, runsFromResult, viewerText, type ScopeNode } from '../syntax-highlights';
 
 /** Scope chain of a run, outermost first ("lang:x" for an embedded root). */
 function chain(node: ScopeNode): string {
@@ -15,12 +15,13 @@ function chain(node: ScopeNode): string {
 function runs(content: string, language?: string): [string, string][] {
   const r = highlightContent(content, language).highlighted.runs;
   expect(r).not.toBeNull();
+  const text = viewerText(content);
   const out: [string, string][] = [];
   // Resolve every run to a unique name to read the runs back in order.
   const spans = r!.spans((node) => chain(node) || null);
   for (const [name, offsets] of spans) {
     for (let i = 0; i < offsets.length; i += 2) {
-      out.push([content.slice(offsets[i], offsets[i + 1]), name]);
+      out.push([text.slice(offsets[i], offsets[i + 1]), name]);
     }
   }
   return out;
@@ -47,7 +48,24 @@ describe('RangeEmitter', () => {
     );
   });
 
-  it('keeps offsets aligned across CRLF and sublanguages', () => {
+  it('normalizes CRLF and lone CR to LF, like the HTML parser', () => {
+    expect(viewerText('a\r\nb\rc\n\r\n')).toBe('a\nb\nc\n\n');
+  });
+
+  it('tokenizes the LF text, so offsets match the viewer text node', () => {
+    const content = 'let a = 1;\r\n// x\r\nlet b = 2;';
+    expect(highlightContent(content, 'javascript').highlighted.runs?.length).toBe(
+      content.length - 2
+    );
+    expect(runs(content, 'javascript')).toEqual(
+      expect.arrayContaining([
+        ['// x', 'comment'],
+        ['2', 'number'],
+      ])
+    );
+  });
+
+  it('keeps offsets aligned across sublanguages', () => {
     const r = runs('<p>\r\n<script>let a = 1;</script>\r\n</p>', 'xml');
     expect(r).toEqual(
       expect.arrayContaining([

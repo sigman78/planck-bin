@@ -14,7 +14,7 @@
 import type { Paste } from './paste';
 import { ViewerFind, type FindStatus } from './viewer-find';
 import type { Highlighted } from './highlight-config';
-import { clearSyntax, paintSyntax, supportsHighlights } from './syntax-highlights';
+import { clearSyntax, paintSyntax, supportsHighlights, viewerText } from './syntax-highlights';
 import { currentTheme } from './highlight-theme';
 import './solarized-dark-hljs.css';
 
@@ -189,15 +189,17 @@ export class ViewManager {
   }
 
   /**
-   * Fill the viewer: one plain text node (the server-rendered one is kept when
-   * it matches), with the tokens painted over it as highlight ranges. Without
-   * the Custom Highlight API the paste stays plain text.
+   * Fill the viewer: one plain text node with LF line endings (the
+   * server-rendered one is kept when it matches), with the tokens painted over
+   * it as highlight ranges. Without the Custom Highlight API the paste stays
+   * plain text.
    */
   private renderViewerContent(content: string, highlighted: Highlighted): void {
+    const shown = viewerText(content);
     const first = this.viewerCode.firstChild;
     const reuse =
-      first instanceof Text && first === this.viewerCode.lastChild && first.data === content;
-    if (!reuse) this.viewerCode.textContent = content;
+      first instanceof Text && first === this.viewerCode.lastChild && first.data === shown;
+    if (!reuse) this.viewerCode.textContent = shown;
     const text = this.viewerCode.firstChild;
     if (!(text instanceof Text) || !highlighted.runs || !supportsHighlights()) return;
     paintSyntax(text, currentTheme().spans(highlighted.runs));

@@ -10,6 +10,14 @@
  * shown as plain text.
  */
 
+/**
+ * The paste as the viewer shows it: CRLF and lone CR become LF, as the HTML
+ * parser does for the server-rendered text. Token offsets refer to this text,
+ * and copying a selection from the viewer yields LF line endings. The paste
+ * content itself is left as stored.
+ */
+export const viewerText = (content: string): string => content.replace(/\r\n?/g, '\n');
+
 /** Highlight name -> flat [start, end, start, end, ...] offsets into the content. */
 export type TokenSpans = Map<string, number[]>;
 

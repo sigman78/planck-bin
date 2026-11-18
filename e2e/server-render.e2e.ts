@@ -81,6 +81,29 @@ test.describe('Server-rendered paste page', () => {
     await expect(page).toHaveTitle('Planck Bin - tavelu-hasoq');
   });
 
+  test('a CRLF paste keeps the server text node and selects as LF', async ({ page }) => {
+    await setupMockApi(page);
+    // No trailing newline: Selection.toString() drops a final one anyway.
+    const content = 'const a = 1;\r\n// note\r\nconst b = 2;';
+    await serveRendered(page, '/tavelu-hasoq.js', { key: 'tavelu-hasoq', content });
+
+    await page.goto('/tavelu-hasoq.js');
+    await expect.poll(() => paintedTexts(page)).toContain('// note');
+    const shown = await page.locator(`${S.viewer} code`).evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return {
+        nodes: el.childNodes.length,
+        hasCR: el.textContent!.includes('\r'),
+        selected: selection.toString(),
+      };
+    });
+    expect(shown).toEqual({ nodes: 1, hasCR: false, selected: content.replace(/\r\n/g, '\n') });
+  });
+
   test('the URL extension still picks the language', async ({ page }) => {
     await setupMockApi(page);
     await serveRendered(page, '/tavelu-hasoq.txt', { key: 'tavelu-hasoq', content: HOSTILE });

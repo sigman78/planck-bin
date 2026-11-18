@@ -4,7 +4,7 @@
 
 import hljs from 'highlight.js/lib/core';
 import type { HLJSOptions } from 'highlight.js';
-import { RangeEmitter, runsFromResult } from './syntax-highlights';
+import { RangeEmitter, runsFromResult, viewerText } from './syntax-highlights';
 
 // Import only commonly used languages
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -237,8 +237,8 @@ export function listLanguages(): LanguageOption[] {
 
 /**
  * Highlighted paste: the token runs, resolved against the theme when painted
- * (highlight-theme.ts). Null for plain text and for results whose runs could
- * not be mapped.
+ * (highlight-theme.ts). Offsets refer to viewerText(content). Null for plain
+ * text and for results whose runs could not be mapped.
  */
 export interface Highlighted {
   runs: RangeEmitter | null;
@@ -260,6 +260,9 @@ const plain = (): Highlighted => ({ runs: null });
  * This performs highlighting in a single pass to avoid duplicate work
  */
 export function highlightContent(content: string, language?: string): HighlightResult {
+  // Tokenize what the viewer shows, so run offsets match its text node.
+  const text = viewerText(content);
+
   // Plain text - no highlighting needed
   if (language === 'txt' || language === '') {
     return { highlighted: plain(), language: undefined };
@@ -269,18 +272,14 @@ export function highlightContent(content: string, language?: string): HighlightR
 
   // Highlighting is synchronous. Bound attacker-controlled work so opening a
   // large paste cannot freeze the viewer tab.
-  if (
-    content.length > (canUseLanguage ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)
-  ) {
+  if (text.length > (canUseLanguage ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)) {
     return { highlighted: plain(), language: canUseLanguage ? language : undefined };
   }
 
   // Language specified - use it directly; otherwise auto-detect
-  const result = canUseLanguage
-    ? hljs.highlight(content, { language })
-    : hljs.highlightAuto(content);
+  const result = canUseLanguage ? hljs.highlight(text, { language }) : hljs.highlightAuto(text);
   return {
-    highlighted: { runs: runsFromResult(result._emitter, content) },
+    highlighted: { runs: runsFromResult(result._emitter, text) },
     language: result.language,
   };
 }
