@@ -435,7 +435,7 @@ test.describe('Command palette', () => {
     await page.locator(S.paletteInput).fill('Plain text');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/testkey0\.txt$/);
-    await expect(page.locator('#viewer [class^="hljs-"]')).toHaveCount(0);
+    await expect(page.locator('#viewer [class^="syn-"]')).toHaveCount(0);
     await expect.poll(() => syntaxHighlightCount(page)).toBe(0);
     await expect(page.locator(S.viewer)).toContainText('def greet(name):');
 
@@ -443,7 +443,7 @@ test.describe('Command palette', () => {
     await page.reload();
     await expect(page.locator(S.viewer)).toContainText('def greet(name):');
     await expect(page).toHaveURL(/\/testkey0\.txt$/);
-    await expect(page.locator('#viewer [class^="hljs-"]')).toHaveCount(0);
+    await expect(page.locator('#viewer [class^="syn-"]')).toHaveCount(0);
 
     // ...and stay plain text as far as the palette and recents are concerned.
     await runCommand(page, 'Switch language');

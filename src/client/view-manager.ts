@@ -14,7 +14,7 @@
 import type { Paste } from './paste';
 import { ViewerFind, type FindStatus } from './viewer-find';
 import type { Highlighted } from './highlight-config';
-import { clearSyntax, paintSyntax, supportsHighlights } from './syntax-highlights';
+import { clearSyntax, paintSyntax, spansToHtml, supportsHighlights } from './syntax-highlights';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
@@ -190,11 +190,11 @@ export class ViewManager {
   /**
    * Fill the viewer. With the Custom Highlight API the code element holds one
    * plain text node (the server-rendered one is kept when it matches) and the
-   * tokens are painted as ranges; otherwise the hljs HTML is used.
+   * tokens are painted as ranges; otherwise the ranges become role spans.
    */
   private renderViewerContent(content: string, highlighted: Highlighted): void {
-    if (!supportsHighlights() || highlighted.spans === null) {
-      this.viewerCode.innerHTML = highlighted.html;
+    if (!supportsHighlights()) {
+      this.viewerCode.innerHTML = spansToHtml(content, highlighted.spans);
       return;
     }
     const first = this.viewerCode.firstChild;

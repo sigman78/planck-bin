@@ -3,8 +3,8 @@
 // This reduces bundle size significantly compared to importing all languages
 
 import hljs from 'highlight.js/lib/core';
-import type { HighlightResult as HljsResult } from 'highlight.js';
-import { extractSpans, type TokenSpans } from './syntax-highlights';
+import type { HLJSOptions, HighlightResult as HljsResult } from 'highlight.js';
+import { RangeEmitter, spansFromResult, type TokenSpans } from './syntax-highlights';
 
 // Import only commonly used languages
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -98,6 +98,9 @@ hljs.registerLanguage('erlang', erlang);
 hljs.registerLanguage('erl', erlang);
 hljs.registerLanguage('haskell', haskell);
 hljs.registerLanguage('hs', haskell);
+
+// Record token ranges instead of building a tree and HTML (syntax-highlights.ts).
+hljs.configure({ __emitter: RangeEmitter as unknown as HLJSOptions['__emitter'] });
 
 // Additional aliases for common file extensions
 hljs.registerLanguage('js', javascript);
@@ -233,13 +236,11 @@ export function listLanguages(): LanguageOption[] {
 }
 
 /**
- * Highlighted paste: the HTML output (fallback for browsers without the
- * Custom Highlight API) and the same tokens as ranges by role (null when the
- * token tree could not be mapped). Plain text has no spans to paint.
+ * Highlighted paste: token ranges by theme role. Plain text, and a result
+ * whose runs could not be mapped, have no spans to paint.
  */
 export interface Highlighted {
-  html: string;
-  spans: TokenSpans | null;
+  spans: TokenSpans;
 }
 
 /**
@@ -250,18 +251,10 @@ export interface HighlightResult {
   language: string | undefined;
 }
 
-const plain = (content: string): Highlighted => ({ html: escapeHtml(content), spans: new Map() });
+const plain = (): Highlighted => ({ spans: new Map() });
 
 function fromResult(content: string, result: HljsResult): Highlighted {
-  return {
-    html: result.value,
-    // Internal token tree (pinned highlight.js version, see syntax-highlights.ts).
-    spans: extractSpans(
-      (result._emitter as unknown as { root?: unknown } | undefined)?.root,
-      content,
-      result.language
-    ),
-  };
+  return { spans: spansFromResult(result._emitter, content, result.language) ?? new Map() };
 }
 
 /**
@@ -272,7 +265,7 @@ function fromResult(content: string, result: HljsResult): Highlighted {
 export function highlightContent(content: string, language?: string): HighlightResult {
   // Plain text - no highlighting needed
   if (language === 'txt' || language === '') {
-    return { highlighted: plain(content), language: undefined };
+    return { highlighted: plain(), language: undefined };
   }
 
   const canUseLanguage = language && hljs.getLanguage(language);
@@ -282,7 +275,7 @@ export function highlightContent(content: string, language?: string): HighlightR
   if (
     content.length > (canUseLanguage ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)
   ) {
-    return { highlighted: plain(content), language: canUseLanguage ? language : undefined };
+    return { highlighted: plain(), language: canUseLanguage ? language : undefined };
   }
 
   // Language specified - use it directly; otherwise auto-detect
@@ -290,18 +283,6 @@ export function highlightContent(content: string, language?: string): HighlightR
     ? hljs.highlight(content, { language })
     : hljs.highlightAuto(content);
   return { highlighted: fromResult(content, result), language: result.language };
-}
-
-/**
- * Escape HTML for safe display
- */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 export default hljs;

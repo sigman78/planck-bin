@@ -67,143 +67,84 @@ code.hljs {
   background-color: var(--color-selection);
 }
 
-/* purposely do not highlight these */
-.hljs-formula,
-.hljs-params,
-.hljs-property {}
-
-/* Comments: bright, not hidden — good comments deserve attention */
-.hljs-comment,
-.hljs-quote,
-.hljs-doctag {
-  color: var(--color-comment);
-  background-color: var(--color-comment-bg);
-  border-radius: 2px;
-/*  padding: 0.05em 0.25em;
-  margin: 0 -0.25em; */
-}
-
-/* Keywords, types, variables, built-ins: base text — too common to stand out */
-.hljs-keyword,
-.hljs-type,
-.hljs-template-tag,
-.hljs-name,
-.hljs-selector-tag,
-.hljs-variable,
-.hljs-template-variable,
-.hljs-tag,
-.hljs-subst,
-.hljs-attr,
-.hljs-attribute,
-.hljs-built_in {
-  color: var(--sol-yellow);
-}
-
-/* Punctuation & operators: dimmed — let names breathe */
-.hljs-punctuation,
-.hljs-operator,
-.hljs-bullet {
-  color: var(--color-punctuation);
-}
-
-/* Constants: strings, numbers, literals — logic paths start here */
-.hljs-string,
-.hljs-number,
-.hljs-literal,
-.hljs-regexp,
-.hljs-link,
-.hljs-symbol,
-.hljs-variable.constant_ {
-  color: var(--color-constant);
-}
-
-/* meta strings follow their semantic role */
-.hljs-meta .hljs-string {
-  color: var(--color-constant);
-}
-
-/* Definitions: function/class names at their declaration site */
-.hljs-selector-id,
-.hljs-selector-class,
-.hljs-title,
-.hljs-title.class_,
-.hljs-title.class_.inherited__,
-.hljs-title.function_,
-.hljs-function .hljs-title,
-.hljs-section {
-  color: var(--color-definition);
-}
-
-/* Special: meta, preprocessor, embedded language tags */
-.hljs-meta,
-.hljs-meta .hljs-keyword,
-.hljs-meta-keyword {
-  color: var(--color-special);
-}
-
-/* Diff */
-.diff .hljs-meta {
-  color: var(--color-diff);
-}
-
-.hljs-deletion {
-  color: var(--color-deletion);
-}
-
-.hljs-addition {
-  color: var(--color-addition);
-}
-
-/* Markdown: preserve content-level formatting (not syntax decoration) */
-.hljs-strong {
-  font-weight: bold;
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
 /*
-  Custom Highlight API variant (syntax-highlights.ts): the same roles as the
-  class rules above, painted as ranges over a plain text node. Roles are
-  resolved in script, so contextual rules (.hljs-meta .hljs-keyword,
-  .diff .hljs-meta) map to their own role here. ::highlight() cannot set
-  font-weight/font-style or border-radius, so strong/emphasis and the
-  comment corner rounding have no equivalent.
+  Token colors by role. highlight.js scopes are mapped to these roles in
+  syntax-highlights.ts (ROLE_BY_SCOPE, plus the contextual meta/diff rules),
+  so the theme only lists roles. Each role is painted with the Custom
+  Highlight API (::highlight) or, without it, as a <span class="syn-*">.
+  The two forms stay separate rules: a selector list with ::highlight() is
+  dropped whole by browsers that do not know it. ::highlight() cannot set
+  font-weight, font-style or border-radius, so neither form uses them.
 */
+
+/* Comments: bright, not hidden - good comments deserve attention */
 ::highlight(syn-comment) {
   color: var(--color-comment);
   background-color: var(--color-comment-bg);
 }
+.syn-comment {
+  color: var(--color-comment);
+  background-color: var(--color-comment-bg);
+}
 
+/* Keywords, types, variables, built-ins, tags, attributes */
 ::highlight(syn-keyword) {
   color: var(--sol-yellow);
 }
+.syn-keyword {
+  color: var(--sol-yellow);
+}
 
+/* Punctuation & operators: dimmed - let names breathe */
 ::highlight(syn-punct) {
   color: var(--color-punctuation);
 }
+.syn-punct {
+  color: var(--color-punctuation);
+}
 
+/* Constants: strings, numbers, literals - logic paths start here */
 ::highlight(syn-constant) {
   color: var(--color-constant);
 }
+.syn-constant {
+  color: var(--color-constant);
+}
 
+/* Definitions: function/class names at their declaration site */
 ::highlight(syn-definition) {
   color: var(--color-definition);
 }
+.syn-definition {
+  color: var(--color-definition);
+}
 
+/* Special: meta, preprocessor (keywords inside meta too) */
 ::highlight(syn-special) {
   color: var(--color-special);
 }
+.syn-special {
+  color: var(--color-special);
+}
 
+/* Diff: meta lines in a diff, deletions, additions */
 ::highlight(syn-diff) {
+  color: var(--color-diff);
+}
+.syn-diff {
   color: var(--color-diff);
 }
 
 ::highlight(syn-deletion) {
   color: var(--color-deletion);
 }
+.syn-deletion {
+  color: var(--color-deletion);
+}
 
 ::highlight(syn-addition) {
+  color: var(--color-addition);
+}
+.syn-addition {
   color: var(--color-addition);
 }
