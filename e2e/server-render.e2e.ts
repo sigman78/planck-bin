@@ -16,7 +16,11 @@ async function serveRendered(page: Page, path: string, doc: GetResponse) {
     const shell = await (
       await route.fetch({ url: new URL('/', route.request().url()).href })
     ).text();
-    const html = renderDocumentPage(shell, { appName: 'Haste', displayName: path.slice(1), doc });
+    const html = renderDocumentPage(shell, {
+      appName: 'Planck Bin',
+      displayName: path.slice(1),
+      doc,
+    });
     expect(html, 'dev shell lost a render anchor').not.toBeNull();
     await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html! });
   });
@@ -71,7 +75,7 @@ test.describe('Server-rendered paste page', () => {
     expect(seen.fetches).toEqual([]);
     expect(await seen.blanked()).toBe(false);
     expect(page.url()).toMatch(/\/tavelu-hasoq\.js$/);
-    await expect(page).toHaveTitle('Haste - tavelu-hasoq');
+    await expect(page).toHaveTitle('Planck Bin - tavelu-hasoq');
   });
 
   test('the URL extension still picks the language', async ({ page }) => {

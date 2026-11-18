@@ -1,8 +1,8 @@
-import userConfig from '../../haste.config';
+import userConfig from '../../planck.config';
 import { AppConfig } from './app-controller';
 
 const defaults: AppConfig = {
-  appName: 'Haste',
+  appName: 'Planck Bin',
   enableTwitter: true,
   scrollToTopOnSave: true,
   lineNumbers: true,

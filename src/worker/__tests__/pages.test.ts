@@ -7,7 +7,8 @@ import type { Env } from '../types';
 import { fakeEnv, type FakeEnvOptions } from '../__fakes__/env';
 import { EMBEDDED_DOCUMENT_ID } from '../../shared/types';
 
-const SHELL = '<html><head><title>hastebin</title></head><body>' + VIEWER_ANCHOR + '</body></html>';
+const SHELL =
+  '<html><head><title>Planck Bin</title></head><body>' + VIEWER_ANCHOR + '</body></html>';
 
 const NOW = Math.floor(Date.now() / 1000);
 const base: FakeEnvOptions = {
@@ -20,7 +21,7 @@ const base: FakeEnvOptions = {
 };
 
 const app = new Hono<{ Bindings: Env }>();
-app.get('*', createPageHandler({ appName: 'Haste' }));
+app.get('*', createPageHandler({ appName: 'Planck Bin' }));
 
 const HTML = { headers: { Accept: 'text/html,application/xhtml+xml,*/*;q=0.8' } };
 
@@ -48,7 +49,7 @@ describe('page handler', () => {
     expect(res.headers.get('ETag')).toBeNull();
     expect(html).toContain('<code class="hljs">a &lt; b</code>');
     expect(html).toContain(`id="${EMBEDDED_DOCUMENT_ID}"`);
-    expect(html).toContain('<title>Haste - tavelu-hasoq</title>');
+    expect(html).toContain('<title>Planck Bin - tavelu-hasoq</title>');
   });
 
   it('serves the plain shell when the flag is off', async () => {

@@ -10,7 +10,7 @@ import { securityHeadersFile } from './src/shared/security-headers';
  */
 function securityHeaders(): Plugin {
   return {
-    name: 'haste-security-headers',
+    name: 'planck-security-headers',
     apply: 'build',
     generateBundle() {
       this.emitFile({ type: 'asset', fileName: '_headers', source: securityHeadersFile() });

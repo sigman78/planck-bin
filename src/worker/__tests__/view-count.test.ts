@@ -21,7 +21,7 @@ const COUNTING = { COUNT_VIEWS: 'true', SERVER_RENDER: 'true' } as Partial<Env>;
 
 const app = new Hono<{ Bindings: Env }>();
 app.route('/', api);
-app.get('*', createPageHandler({ appName: 'Haste' }));
+app.get('*', createPageHandler({ appName: 'Planck Bin' }));
 
 async function viewWrites(path: string, init: RequestInit = {}, vars = COUNTING) {
   const { env, ctx, writes } = fakeEnv({ ...base, vars });

@@ -1,6 +1,6 @@
 //
 //
 export default {
-  appName: 'Haste',
+  appName: 'Planck Bin',
   enableTwitter: true,
 };

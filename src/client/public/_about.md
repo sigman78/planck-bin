@@ -1,9 +1,9 @@
-# Haste
+# Planck Bin
 
 Sharing code is a good thing, and it should be _really_ easy to do it.
 A lot of times, I want to show you something I'm seeing - and that's where we use pastebins.
 
-Haste is the prettiest, easiest to use pastebin ever made.
+Planck Bin is a pastebin that runs on Cloudflare Workers.
 
 ## Basic Usage
 
@@ -57,7 +57,7 @@ Not responsible for any loss of data or removed pastes.
 
 ## Technology
 
-This Haste server runs on Cloudflare's global edge network:
+Planck Bin runs on Cloudflare's global edge network:
 
 - **Cloudflare Workers** - Serverless compute at 300+ locations worldwide
 - **D1 Database** - SQLite database at the edge
@@ -66,14 +66,14 @@ This Haste server runs on Cloudflare's global edge network:
 
 ## Open Source
 
-Haste can easily be installed behind your network, and it's all open source!
+Planck Bin is open source. You can deploy it to your own Cloudflare account.
 
-- **This**: [Modern Cloudflare rework](https://github.com/sigman78/cf-haste-server)
+- **This**: [planck-bin](https://github.com/sigman78/planck-bin)
 - **Original**: [haste-server](https://github.com/seejohnrun/haste-server) by John Crepezzi
-- **CLI client**: [haste-client](https://github.com/seejohnrun/haste-client)
+- **CLI client**: [haste-client](https://github.com/seejohnrun/haste-client) (API compatible)
 
 ## Credits
 
 Original Haste by John Crepezzi <john.crepezzi@gmail.com>
 Key Design by Brian Dawson <bridawson@gmail.com>
-Modernized for Cloudflare - SiGMan <sigman@ioupg.com>
+Planck Bin - SiGMan <sigman@ioupg.com>

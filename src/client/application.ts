@@ -1,5 +1,5 @@
 /**
- * Haste - Main Application Entry Point
+ * Planck Bin - Main Application Entry Point
  *
  * Refactored Architecture:
  * - Document (Model): Pure sync business logic

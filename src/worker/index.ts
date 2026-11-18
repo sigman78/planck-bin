@@ -4,7 +4,7 @@ import { api } from './api';
 import { createStore } from './storage';
 import { installRequestPolicy } from './request-policy';
 import { createPageHandler } from './pages';
-import appConfig from '../../haste.config';
+import appConfig from '../../planck.config';
 
 const app = new Hono<{ Bindings: Env }>();
 

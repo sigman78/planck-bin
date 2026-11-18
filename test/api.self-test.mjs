@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * API Integration Tests for Haste Server
+ * API Integration Tests for Planck Bin
  * Tests all endpoints and verifies D1 database persistence
  */
 
@@ -241,7 +241,7 @@ async function testTooLargeDocument() {
 // Main test runner
 async function runTests() {
   console.log('========================================');
-  console.log('   Haste Server API Test Suite');
+  console.log('   Planck Bin API Test Suite');
   console.log('========================================');
 
   // Test 1: Health check

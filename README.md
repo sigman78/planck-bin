@@ -1,22 +1,26 @@
-```
- _   _           _
-| | | | __ _ ___| |_ ___
-| |_| |/ _` / __| __/ _ \
-|  _  | (_| \__ \ ||  __/
-|_| |_|\__,_|___/\__\___|
+# planck-bin
 
-Cloudflare Workers Edition
-```
+Pastebin for Cloudflare Workers with D1 storage. API compatible with haste-server.
 
-> Original [haste-server](https://github.com/seejohnrun/haste-server) by John Crepezzi, modernized for Cloudflare's edge network.
+[Demo](https://planck-bin.sigman78.workers.dev/)
 
-A pastebin that runs on Cloudflare Workers. [Demo](https://haste.sigman78.workers.dev/)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sigman78/planck-bin)
 
-## Why this fork
+![Paste view with syntax highlighting](docs/media/screenshot-viewer.png)
 
-The original runs on Node.js + Redis. This version drops both: Workers replace the server, D1 (SQLite at the edge) replaces Redis. No cold starts, global distribution, fits in the free tier for personal use.
+## Features
 
-Rewritten in TypeScript with Vite, no jQuery.
+- Runs on Workers, stores pastes in D1. Fits the free tier for personal use.
+- Optional server-side rendering of paste pages.
+- Command palette (Ctrl+/) and keyboard shortcuts for all actions.
+- Same HTTP API as haste-server, so [haste-client](https://github.com/seejohnrun/haste-client) works.
+- Paste expiry with a nightly cleanup cron, rate limits, optional storage cap.
+- Local drafts and recent paste list in the browser.
+
+## Background
+
+Based on [haste-server](https://github.com/seejohnrun/haste-server) by John Crepezzi. The original
+uses Node.js and Redis; this version is rewritten in TypeScript with Vite and runs on Cloudflare.
 
 ## Quick start
 
@@ -34,7 +38,7 @@ pnpm db:migrate:remote
 pnpm run deploy   # "pnpm deploy" is a built-in pnpm command
 ```
 
-Your instance will be live at `https://haste.YOUR-SUBDOMAIN.workers.dev`.
+Your instance will be live at `https://planck-bin.YOUR-SUBDOMAIN.workers.dev`.
 
 ## Config
 
@@ -96,6 +100,8 @@ curl https://your-worker.dev/raw/KEY
 
 ## Command palette
 
+![The command palette in action](docs/media/command-palette.gif)
+
 Press **Ctrl+/** (or click the h-bar pill in the top-right corner) to open the command
 palette. Type to filter commands, then press Enter.
 
@@ -128,21 +134,15 @@ Alt+Shift (Opt+Shift on Mac) is the same physical chord everywhere and is left a
 browsers, except Chrome's Alt+Shift+I/A/N/T, which are not used. Keys match the physical key,
 so they work on any layout, and a key only does something while its command is available.
 
-## Niceties
-
-- **Draft autosave** — unsaved text is kept in localStorage and restored on your next visit
-- **Copy link** — Alt+Shift+C (or the palette) copies the paste URL to the clipboard
-- **Raw view** — open the plain-text version of any paste in a new tab
-- **Nightly cleanup** — a cron trigger purges expired pastes automatically
-
 ## Tests
 
 ```bash
 pnpm test          # unit tests (jest)
 pnpm test:e2e      # browser tests (playwright)
 pnpm test:api      # API integration tests (needs `pnpm dev` running)
+pnpm screenshots   # regenerate the README screenshot in docs/media
 ```
 
 ## License
 
-MIT. Original Haste by [John Crepezzi](https://github.com/seejohnrun).
+MIT, see [LICENSE](LICENSE). Based on the original Haste by [John Crepezzi](https://github.com/seejohnrun).

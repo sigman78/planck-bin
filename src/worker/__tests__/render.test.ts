@@ -18,7 +18,7 @@ const NASTY = [
 ].join('\n');
 
 function render(doc: GetResponse, displayName = `${doc.key}.js`) {
-  return renderDocumentPage(SHELL, { appName: 'Haste', displayName, doc });
+  return renderDocumentPage(SHELL, { appName: 'Planck Bin', displayName, doc });
 }
 
 function parse(html: string): Document {
@@ -63,7 +63,7 @@ describe('renderDocumentPage', () => {
 
   it('sets the title like the client and an escaped preview title', () => {
     const dom = parse(render({ key: 'k', content: 'x' }, 'k.c"><script>')!);
-    expect(dom.title).toBe('Haste - k');
+    expect(dom.title).toBe('Planck Bin - k');
     expect(dom.querySelector('meta[property="og:title"]')!.getAttribute('content')).toBe(
       'k.c"><script>'
     );
@@ -71,7 +71,7 @@ describe('renderDocumentPage', () => {
 
   it('gives up (plain shell) when an anchor is missing or repeated', () => {
     const doc = { key: 'k', content: 'x' };
-    const opts = { appName: 'Haste', displayName: 'k', doc };
+    const opts = { appName: 'Planck Bin', displayName: 'k', doc };
     expect(renderDocumentPage(SHELL.replace(VIEWER_ANCHOR, ''), opts)).toBeNull();
     expect(renderDocumentPage(SHELL + '</body>', opts)).toBeNull();
     expect(renderDocumentPage(SHELL.replace('<title>', ''), opts)).toBeNull();

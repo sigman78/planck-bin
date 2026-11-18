@@ -10,7 +10,7 @@ NC='\033[0m' # No Color
 BASE_URL="http://localhost:8787"
 
 echo "========================================"
-echo "   Haste Server API Test Suite"
+echo "   Planck Bin API Test Suite"
 echo "========================================"
 echo ""
 

@@ -41,7 +41,7 @@ test.describe('Paste lifecycle', () => {
     await expectDisabled(page, S.saveBtn);
     await expectCommand(page, 'Duplicate & edit', false);
 
-    await expect(page).toHaveTitle('Haste');
+    await expect(page).toHaveTitle('Planck Bin');
   });
 
   // -- 2. Typing enables the Save button -------------------------------------
@@ -82,7 +82,7 @@ test.describe('Paste lifecycle', () => {
     await expectCommand(page, 'Duplicate & edit', true);
     await expectDisabled(page, S.saveBtn);
 
-    await expect(page).toHaveTitle(/Haste - testkey0/);
+    await expect(page).toHaveTitle(/Planck Bin - testkey0/);
 
     expect(store.get('testkey0')).toBe(content1);
   });

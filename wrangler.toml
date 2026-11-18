@@ -1,4 +1,4 @@
-name = "haste"
+name = "planck-bin"
 main = "src/worker/index.ts"
 compatibility_date = "2026-03-20"
 compatibility_flags = ["nodejs_compat", "assets_navigation_has_no_effect"]
