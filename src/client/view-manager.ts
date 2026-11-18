@@ -14,7 +14,8 @@
 import type { Paste } from './paste';
 import { ViewerFind, type FindStatus } from './viewer-find';
 import type { Highlighted } from './highlight-config';
-import { clearSyntax, paintSyntax, spansToHtml, supportsHighlights } from './syntax-highlights';
+import { clearSyntax, paintSyntax, supportsHighlights } from './syntax-highlights';
+import { currentTheme } from './highlight-theme';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
@@ -188,21 +189,18 @@ export class ViewManager {
   }
 
   /**
-   * Fill the viewer. With the Custom Highlight API the code element holds one
-   * plain text node (the server-rendered one is kept when it matches) and the
-   * tokens are painted as ranges; otherwise the ranges become role spans.
+   * Fill the viewer: one plain text node (the server-rendered one is kept when
+   * it matches), with the tokens painted over it as highlight ranges. Without
+   * the Custom Highlight API the paste stays plain text.
    */
   private renderViewerContent(content: string, highlighted: Highlighted): void {
-    if (!supportsHighlights()) {
-      this.viewerCode.innerHTML = spansToHtml(content, highlighted.spans);
-      return;
-    }
     const first = this.viewerCode.firstChild;
     const reuse =
       first instanceof Text && first === this.viewerCode.lastChild && first.data === content;
     if (!reuse) this.viewerCode.textContent = content;
     const text = this.viewerCode.firstChild;
-    if (text instanceof Text) paintSyntax(text, highlighted.spans);
+    if (!(text instanceof Text) || !highlighted.runs || !supportsHighlights()) return;
+    paintSyntax(text, currentTheme().spans(highlighted.runs));
   }
 
   renderLoadingState(): void {

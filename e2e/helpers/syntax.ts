@@ -1,21 +1,25 @@
 import type { Page } from '@playwright/test';
 
 /**
- * Text painted with one syntax role (CSS Custom Highlight API, see
- * src/client/syntax-highlights.ts), one entry per range.
+ * Texts painted by syntax highlights (CSS Custom Highlight API, names hl-N;
+ * see src/client/highlight-theme.ts), one entry per range.
  */
-export function syntaxTexts(page: Page, role: string): Promise<string[]> {
-  return page.evaluate((name) => {
+export function paintedTexts(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
     const registry = CSS.highlights as unknown as Map<string, Highlight>;
-    const highlight = registry.get(name);
-    return highlight ? [...highlight].map((range) => (range as Range).toString()) : [];
-  }, `syn-${role}`);
+    const texts: string[] = [];
+    for (const [name, highlight] of registry) {
+      if (!name.startsWith('hl-')) continue;
+      for (const range of highlight as unknown as Set<Range>) texts.push(range.toString());
+    }
+    return texts;
+  });
 }
 
 /** Number of syntax highlights currently registered. */
 export function syntaxHighlightCount(page: Page): Promise<number> {
   return page.evaluate(() => {
     const registry = CSS.highlights as unknown as Map<string, Highlight>;
-    return [...registry.keys()].filter((name) => name.startsWith('syn-')).length;
+    return [...registry.keys()].filter((name) => name.startsWith('hl-')).length;
   });
 }

@@ -3,8 +3,8 @@
 // This reduces bundle size significantly compared to importing all languages
 
 import hljs from 'highlight.js/lib/core';
-import type { HLJSOptions, HighlightResult as HljsResult } from 'highlight.js';
-import { RangeEmitter, spansFromResult, type TokenSpans } from './syntax-highlights';
+import type { HLJSOptions } from 'highlight.js';
+import { RangeEmitter, runsFromResult } from './syntax-highlights';
 
 // Import only commonly used languages
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -236,11 +236,12 @@ export function listLanguages(): LanguageOption[] {
 }
 
 /**
- * Highlighted paste: token ranges by theme role. Plain text, and a result
- * whose runs could not be mapped, have no spans to paint.
+ * Highlighted paste: the token runs, resolved against the theme when painted
+ * (highlight-theme.ts). Null for plain text and for results whose runs could
+ * not be mapped.
  */
 export interface Highlighted {
-  spans: TokenSpans;
+  runs: RangeEmitter | null;
 }
 
 /**
@@ -251,11 +252,7 @@ export interface HighlightResult {
   language: string | undefined;
 }
 
-const plain = (): Highlighted => ({ spans: new Map() });
-
-function fromResult(content: string, result: HljsResult): Highlighted {
-  return { spans: spansFromResult(result._emitter, content, result.language) ?? new Map() };
-}
+const plain = (): Highlighted => ({ runs: null });
 
 /**
  * Highlight content with optional language hint
@@ -282,7 +279,10 @@ export function highlightContent(content: string, language?: string): HighlightR
   const result = canUseLanguage
     ? hljs.highlight(content, { language })
     : hljs.highlightAuto(content);
-  return { highlighted: fromResult(content, result), language: result.language };
+  return {
+    highlighted: { runs: runsFromResult(result._emitter, content) },
+    language: result.language,
+  };
 }
 
 export default hljs;

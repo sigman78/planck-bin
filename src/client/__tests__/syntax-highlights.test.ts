@@ -1,20 +1,30 @@
 import hljs, { highlightContent } from '../highlight-config';
-import { RangeEmitter, spansFromResult, spansToHtml, type TokenSpans } from '../syntax-highlights';
+import { RangeEmitter, runsFromResult, type ScopeNode } from '../syntax-highlights';
 
-/** Text covered by each role, in order. */
-function covered(content: string, spans: TokenSpans): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const [role, offsets] of spans) {
-    out[role] = [];
+/** Scope chain of a run, outermost first ("lang:x" for an embedded root). */
+function chain(node: ScopeNode): string {
+  const parts: string[] = [];
+  for (let n: ScopeNode | null = node; n; n = n.parent) {
+    if (n.scope) parts.unshift(n.scope);
+    else if (n.language) parts.unshift('lang:' + n.language);
+  }
+  return parts.join(' > ');
+}
+
+/** Text of each run with its scope chain. */
+function runs(content: string, language?: string): [string, string][] {
+  const r = highlightContent(content, language).highlighted.runs;
+  expect(r).not.toBeNull();
+  const out: [string, string][] = [];
+  // Resolve every run to a unique name to read the runs back in order.
+  const spans = r!.spans((node) => chain(node) || null);
+  for (const [name, offsets] of spans) {
     for (let i = 0; i < offsets.length; i += 2) {
-      out[role].push(content.slice(offsets[i], offsets[i + 1]));
+      out.push([content.slice(offsets[i], offsets[i + 1]), name]);
     }
   }
   return out;
 }
-
-const roles = (content: string, language?: string) =>
-  covered(content, highlightContent(content, language).highlighted.spans);
 
 describe('RangeEmitter', () => {
   it('is the emitter hljs uses, and produces no HTML', () => {
@@ -23,76 +33,67 @@ describe('RangeEmitter', () => {
     expect(result.value).toBe('');
   });
 
-  it('maps hljs tokens to theme roles with exact offsets', () => {
-    const r = roles('const x = "hi"; // note\nfunction f(a) { return 42; }', 'javascript');
-    expect(r.keyword).toEqual(expect.arrayContaining(['const', 'function', 'return']));
-    expect(r.constant).toEqual(expect.arrayContaining(['"hi"', '42']));
-    expect(r.comment).toEqual(['// note']);
-    expect(r.definition).toEqual(['f']);
-    // params scope is unstyled: "a" stays base text
-    expect(Object.values(r).flat()).not.toContain('a');
+  it('records runs with exact offsets and their scope chains', () => {
+    const r = runs('const x = "hi"; // note\nfunction f(a) { return 42; }', 'javascript');
+    expect(r).toEqual(
+      expect.arrayContaining([
+        ['const', 'keyword'],
+        ['"hi"', 'string'],
+        ['// note', 'comment'],
+        ['f', 'title.function'],
+        ['a', 'params'],
+        ['42', 'number'],
+      ])
+    );
   });
 
   it('keeps offsets aligned across CRLF and sublanguages', () => {
-    const r = roles('<p>\r\n<script>let a = 1;</script>\r\n</p>', 'xml');
-    // "<script>" and "let" are both keyword-colored and adjacent, so merged.
-    expect(r.keyword).toEqual(['<p>', '<script>let', '</script>', '</p>']);
-    expect(r.constant).toEqual(['1']);
-  });
-
-  it('applies contextual roles (keyword inside meta, diff meta)', () => {
-    expect(roles('#include <stdio.h>\nint main() {}', 'cpp').special?.join('')).toContain(
-      'include'
+    const r = runs('<p>\r\n<script>let a = 1;</script>\r\n</p>', 'xml');
+    expect(r).toEqual(
+      expect.arrayContaining([
+        ['let', 'lang:javascript > keyword'],
+        ['1', 'lang:javascript > number'],
+      ])
     );
-    const d = roles('@@ -1 +1 @@\n-a\n+b', 'diff');
-    expect(d.diff).toEqual(['@@ -1 +1 @@']);
-    expect(d.deletion).toEqual(['-a']);
-    expect(d.addition).toEqual(['+b']);
   });
 
-  it('lets embedded runs inherit the host scope chain', () => {
+  it('reparents embedded runs onto the host scope chain', () => {
     const host = new RangeEmitter();
     host.openNode('string');
     const inner = new RangeEmitter();
-    inner.addText('x');
     inner.openNode('params');
     inner.addText('y');
     inner.closeNode();
+    inner.finalize();
     host.addText('"');
     host.__addSublanguage(inner, 'foo');
     host.addText('"');
     host.closeNode();
     host.finalize();
-    expect(host.spans(undefined)).toEqual(new Map([['constant', [0, 4]]]));
+    const seen: string[] = [];
+    host.spans((node) => {
+      seen.push(chain(node));
+      return null;
+    });
+    expect(seen).toEqual(['string', 'string > lang:foo > params', 'string']);
   });
 
-  it('auto-detects and still yields ranges', () => {
+  it('auto-detects and still yields runs', () => {
     const content = 'def greet(name):\n    return "hi " + name\n';
     const result = highlightContent(content);
     expect(result.language).toBe('python');
-    expect(covered(content, result.highlighted.spans).keyword).toContain('def');
+    expect(result.highlighted.runs?.length).toBe(content.length);
   });
 
   it('rejects runs that do not add up to the content', () => {
     const e = new RangeEmitter();
     e.addText('abc');
-    expect(spansFromResult(e, 'abcd', undefined)).toBeNull();
-    expect(spansFromResult({}, '', undefined)).toBeNull();
+    expect(runsFromResult(e, 'abcd')).toBeNull();
+    expect(runsFromResult(e, 'abc')).toBe(e);
+    expect(runsFromResult({}, '')).toBeNull();
   });
 
-  it('gives plain text no spans', () => {
-    expect(highlightContent('a < b', 'txt').highlighted.spans).toEqual(new Map());
-  });
-});
-
-describe('spansToHtml', () => {
-  it('wraps ranges in role spans and escapes all text', () => {
-    const spans: TokenSpans = new Map([
-      ['keyword', [0, 3]],
-      ['constant', [6, 13]],
-    ]);
-    expect(spansToHtml('let a="<b>&x"; <i>', spans)).toBe(
-      '<span class="syn-keyword">let</span> a=<span class="syn-constant">"&lt;b&gt;&amp;x"</span>; &lt;i&gt;'
-    );
+  it('gives plain text no runs', () => {
+    expect(highlightContent('a < b', 'txt').highlighted.runs).toBeNull();
   });
 });
