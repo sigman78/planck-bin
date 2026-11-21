@@ -42,6 +42,15 @@
 				</div>
 				<div id="island-list" class="island-list" role="listbox" aria-label="Commands"></div>
 			</div>
+			<!-- Unread burn-after-reading paste: the pill morphs into this question. -->
+			<div class="island-prompt" role="alertdialog" aria-labelledby="island-prompt-title" aria-describedby="island-prompt-text">
+				<p class="island-prompt-title" id="island-prompt-title">Burn after reading</p>
+				<p class="island-prompt-text" id="island-prompt-text">This paste can be read once. Opening it deletes it from the server for good.</p>
+				<div class="island-prompt-actions">
+					<button type="button" class="island-prompt-cancel">New paste</button>
+					<button type="button" class="island-prompt-confirm">Open and burn</button>
+				</div>
+			</div>
 		</div>
 
 		<!-- Both views start hidden; the app shows the right one on its first render. -->
@@ -53,13 +62,6 @@
 			<textarea id="editor" spellcheck="false" style="display: none"
 				aria-label="Paste content" aria-describedby="editor-help"
 				placeholder="Paste your code here..."></textarea>
-		</div>
-		<!-- Unread burn-after-reading paste: reading destroys it, so ask first. -->
-		<div id="burn-gate" hidden>
-			<div class="burn-gate-plaque" role="group" aria-labelledby="burn-gate-title">
-				<p id="burn-gate-title">This paste will be destroyed after you read it.</p>
-				<button type="button" id="burn-reveal">Reveal and destroy</button>
-			</div>
 		</div>
 		<p id="editor-help" class="visually-hidden">Tab inserts spaces. Press Escape, then Tab, to move focus out of the editor.</p>
 		<div id="drop-overlay" aria-hidden="true">

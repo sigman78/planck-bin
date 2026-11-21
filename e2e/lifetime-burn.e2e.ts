@@ -4,8 +4,9 @@ import { S } from './helpers/selectors';
 import { expectCommand, openPalette, paletteLabel, runCommand } from './helpers/palette';
 import { renderBurnPage } from '../src/worker/render';
 
-const GATE = '#burn-gate';
-const REVEAL = '#burn-reveal';
+const GATE = '#island.prompting .island-prompt';
+const REVEAL = '#island .island-prompt-confirm';
+const CANCEL = '#island .island-prompt-cancel';
 
 /** Record every GET of /documents/:key. */
 function watchLoads(page: Page): string[] {
@@ -98,23 +99,29 @@ test.describe('Burn after reading', () => {
     await expect(page.locator(S.saveBtn)).toHaveText('Save');
   });
 
-  test('a reader gets the gate, and Reveal reads it exactly once', async ({ page }) => {
+  test('a reader gets the prompt, and Open reads it exactly once', async ({ page }) => {
     const store = await setupMockApi(page);
     store.setBurn('secret', 'the launch code');
     const loads = watchLoads(page);
 
     await page.goto('/secret');
     await expect(page.locator(GATE)).toBeVisible();
+    await expect(page.locator(REVEAL)).toBeFocused();
     await expect(page.locator(S.viewer)).toBeHidden();
     await expect(page.locator(S.editor)).toBeHidden();
     expect(loads.every((url) => url.includes('peek=1'))).toBe(true);
     expect(store.get('secret')).toBe('the launch code');
-    await expectCommand(page, 'Duplicate & edit', false);
-    await expectCommand(page, 'View raw', false);
+
+    // It has to be answered: Escape, the palette shortcut and outside clicks do nothing.
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+/');
+    await page.mouse.click(20, 300);
+    await expect(page.locator(GATE)).toBeVisible();
+    await expect(page.locator(S.island)).not.toHaveClass(/open/);
 
     await page.locator(REVEAL).click();
     await expect(page.locator(S.viewer)).toContainText('the launch code');
-    await expect(page.locator(GATE)).toBeHidden();
+    await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
     expect(store.get('secret')).toBeUndefined();
     expect(loads.filter((url) => !url.includes('peek=1'))).toHaveLength(1);
     await expectCommand(page, 'Copy link', false);
@@ -126,7 +133,38 @@ test.describe('Burn after reading', () => {
     await expect(page.locator(S.toast)).toContainText('not found');
   });
 
-  test('server-rendered burn page shows the gate without any read', async ({ page }) => {
+  test('offline at Open: nothing is lost and the prompt stays', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.setBurn('secret', 'the launch code');
+    await page.goto('/secret');
+    await expect(page.locator(GATE)).toBeVisible();
+
+    await page.route('**/documents/secret', (route) => route.abort('internetdisconnected'));
+    await page.locator(REVEAL).click();
+    await expect(page.locator(S.toast)).toContainText('Could not reach the server');
+    await expect(page.locator(GATE)).toBeVisible();
+    await expect(page.locator(REVEAL)).toBeEnabled();
+    await expect(page.locator(S.viewer)).toBeHidden();
+    expect(store.get('secret')).toBe('the launch code');
+
+    await page.unroute('**/documents/secret');
+    await page.locator(REVEAL).click();
+    await expect(page.locator(S.viewer)).toContainText('the launch code');
+    expect(store.get('secret')).toBeUndefined();
+  });
+
+  test('New paste leaves it unread', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.setBurn('secret', 'the launch code');
+    await page.goto('/secret');
+    await page.locator(CANCEL).click();
+    await expect(page.locator(S.editor)).toBeVisible();
+    await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
+    expect(page.url()).toMatch(/\/$/);
+    expect(store.get('secret')).toBe('the launch code');
+  });
+
+  test('server-rendered burn page shows the prompt without any read', async ({ page }) => {
     const store = await setupMockApi(page);
     store.setBurn('secret', 'the launch code');
     const loads = watchLoads(page);
