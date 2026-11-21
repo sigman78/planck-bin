@@ -19,7 +19,7 @@ async function afterPrint(page: Page) {
 const SRC = ['/* one', '   two */', 'const a = "x";', '', 'f(a);'].join('\n');
 
 test.describe('Print listing', () => {
-  test('prints one numbered row per line with the syntax colors', async ({ page }) => {
+  test('prints one numbered row per line, without syntax colors', async ({ page }) => {
     const store = await setupMockApi(page);
     store.set('abc', SRC);
     await page.goto('/abc.js');
@@ -35,10 +35,8 @@ test.describe('Print listing', () => {
     await expect(page.locator(LISTING)).toBeVisible();
     await expect(page.locator(S.viewer)).toBeHidden();
     await expect(page.locator(S.island)).toBeHidden();
-    // The block comment is split at its line break; each half paints on its row.
-    const painted = await paintedTexts(page);
-    expect(painted).toEqual(expect.arrayContaining(['/* one', '   two */', '"x"']));
-    expect(painted.length).toBeGreaterThan(before);
+    // Plain text on paper: the listing adds no syntax ranges.
+    expect((await paintedTexts(page)).length).toBe(before);
 
     await afterPrint(page);
     await expect(page.locator(LISTING)).toHaveCount(0);

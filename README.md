@@ -137,9 +137,9 @@ reading** and turns it off). Non-default choices show as an icon on
 the Save chip: a clock for a lifetime, a flame for burn (the flame wins when both are set); the
 details are in its tooltip. Burn pastes are not added to the recent list.
 
-Printing (the browser's Print) produces a source listing: numbered lines on white, long lines
-wrapped under their own number, syntax colors in a palette darkened for paper, and the paste
-address, line count and page numbers in the page margins.
+Printing (the browser's Print) produces a plain black-and-white source listing: numbered lines,
+long lines wrapped under their own number, and the paste address, line count and page numbers in
+the page margins.
 
 ## Shortcuts
 
