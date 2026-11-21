@@ -127,7 +127,6 @@ export class AppController {
     this.view.setCallbacks({
       onContentInput: (content) => this.handleContentInput(content),
       onFileDrop: (content) => this.handleFileDrop(content),
-      onBurnReveal: () => void this.revealBurn(),
     });
 
     // Initialize history manager
@@ -342,23 +341,28 @@ export class AppController {
     this.hasRendered = true;
     this.view.renderBurnGate();
     this.syncChrome();
-    this.palette.settle();
+    this.palette.showPrompt({
+      confirm: () => void this.revealBurn(),
+      cancel: () => this.newDocument(true),
+    });
   }
 
   /** Read (and so destroy) the burn paste behind the gate. */
   private async revealBurn(): Promise<void> {
     const path = this.pendingBurn;
     if (this.isBusy || !path) return;
-    this.pendingBurn = null;
 
     this.activity = 'loading';
+    this.palette.setPromptBusy(true);
     this.notify.progressStart();
     try {
       const result = await this.session.load(path, true);
+      this.pendingBurn = null;
       this.document.apply(result.paste);
       this.recent.remove(path.key);
       this.activity = 'idle';
       this.notify.progressDone();
+      this.palette.hidePrompt();
       if (!path.ext && result.canonicalPath !== window.location.pathname) {
         this.navigation.replacePath(result.canonicalPath);
       }
@@ -367,7 +371,17 @@ export class AppController {
     } catch (err) {
       this.activity = 'idle';
       this.notify.progressDone();
-      this.showLoadFailure(path, err);
+      // Only a 404 means it is gone. Anything else (offline, 5xx) never reached
+      // the delete or lost its answer before we saw content: keep asking.
+      if (err instanceof Error && err.message === 'Document not found') {
+        this.pendingBurn = null;
+        this.palette.hidePrompt();
+        this.showLoadFailure(path, err);
+        return;
+      }
+      console.error('Reveal failed:', err);
+      this.palette.setPromptBusy(false);
+      this.notify.toast('Could not reach the server. Try again.', 'error');
     }
   }
 
@@ -377,6 +391,7 @@ export class AppController {
   ): void {
     this.viewMode = mode;
     this.pendingBurn = null;
+    this.palette.hidePrompt();
     // Close first: renderFullState may move focus into the editor.
     this.palette.close(false);
     const render = () => {

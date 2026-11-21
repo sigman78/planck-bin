@@ -57,8 +57,8 @@ remembered in your browser. An instance may cap the longest lifetime.
 ## Burn After Reading
 
 Turn on **Burn after reading** before saving to create a paste that can be read once. Whoever opens
-the link sees a prompt first; clicking **Reveal and destroy** shows the paste and deletes it from
-the server, and the link stops working. Link previews in chat apps do not count as a read. Reading
+the link is asked first; clicking **Open and burn** shows the paste and deletes it from the server,
+and the link stops working. Nothing of the paste reaches the browser before that click. Link previews in chat apps do not count as a read. Reading
 it through `/raw/` or the API deletes it right away.
 
 ## Privacy

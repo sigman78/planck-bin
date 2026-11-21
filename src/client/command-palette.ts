@@ -38,6 +38,12 @@ interface Row {
   action?: (evt: { shiftKey: boolean }) => boolean | void;
 }
 
+/** Callbacks for the island's question mode (see showPrompt). */
+export interface PromptHandlers {
+  confirm: () => void;
+  cancel: () => void;
+}
+
 const MENU_TITLES: Record<string, string> = {
   language: 'Language',
   recent: 'Recent',
@@ -55,6 +61,12 @@ export class CommandPalette {
   private readonly crumb: HTMLElement;
   private readonly input: HTMLInputElement;
   private readonly list: HTMLElement;
+  private readonly prompt: HTMLElement;
+  private readonly promptConfirm: HTMLButtonElement;
+  private readonly promptCancel: HTMLButtonElement;
+  private promptHandlers: PromptHandlers | null = null;
+  /** Bumped by every show/hide, so a stale deferred show does nothing. */
+  private promptToken = 0;
 
   private menu: string | null = null;
   private menuItems: PaletteItem[] = [];
@@ -78,10 +90,16 @@ export class CommandPalette {
     this.crumb = q('.island-crumb');
     this.input = q('.island-input');
     this.list = q('.island-list');
+    this.prompt = q('.island-prompt');
+    this.promptConfirm = q('.island-prompt-confirm');
+    this.promptCancel = q('.island-prompt-cancel');
   }
 
   init(): void {
     this.panel.inert = true;
+    this.prompt.inert = true;
+    this.promptConfirm.addEventListener('click', () => this.promptHandlers?.confirm());
+    this.promptCancel.addEventListener('click', () => this.promptHandlers?.cancel());
 
     this.saveBtn.addEventListener('click', (evt) => {
       evt.stopPropagation();
@@ -94,7 +112,8 @@ export class CommandPalette {
     this.root.addEventListener('click', (evt) => {
       const target = evt.target as Node;
       // Row clicks close the palette before bubbling here; never reopen for them.
-      if (this.isOpen() || this.saveBtn.contains(target) || this.panel.contains(target)) return;
+      if (this.isOpen() || this.isPrompting()) return;
+      if (this.saveBtn.contains(target) || this.panel.contains(target)) return;
       this.open();
     });
 
@@ -114,6 +133,8 @@ export class CommandPalette {
     window.addEventListener(
       'keydown',
       (evt) => {
+        // The question has to be answered: no palette or commands meanwhile.
+        if (this.isPrompting()) return;
         if (isPaletteShortcut(evt)) {
           evt.preventDefault();
           this.toggle();
@@ -159,6 +180,59 @@ export class CommandPalette {
 
   isOpen(): boolean {
     return this.root.classList.contains('open');
+  }
+
+  isPrompting(): boolean {
+    return this.root.classList.contains('prompting');
+  }
+
+  /**
+   * Morph the pill into a question with two answers. It stays until
+   * hidePrompt: outside clicks, Escape and the palette shortcut do nothing.
+   * On first load the pill fades in first, then morphs, so the change from
+   * the familiar pill reads as the app asking.
+   */
+  showPrompt(handlers: PromptHandlers): void {
+    this.close(false);
+    this.promptHandlers = handlers;
+    this.setPromptBusy(false);
+    if (this.isPrompting()) return;
+    const token = ++this.promptToken;
+    const fresh = !this.root.hasAttribute('data-settled');
+    this.settle();
+    const morph = () => {
+      if (token !== this.promptToken) return;
+      if (this.collapseTimer !== null) clearTimeout(this.collapseTimer);
+      this.root.style.width = `${this.root.offsetWidth}px`;
+      this.root.style.height = `${this.root.offsetHeight}px`;
+      void this.root.offsetWidth;
+      this.root.classList.add('prompting');
+      this.prompt.inert = false;
+      this.root.style.width = `${this.prompt.offsetWidth}px`;
+      this.root.style.height = `${this.prompt.offsetHeight}px`;
+      this.promptConfirm.focus({ preventScroll: true });
+    };
+    // Two frames: the first paints the settled pill, the second starts the morph.
+    if (fresh) requestAnimationFrame(() => requestAnimationFrame(morph));
+    else morph();
+  }
+
+  /** Fold the question back into the pill. */
+  hidePrompt(): void {
+    this.promptToken++;
+    this.promptHandlers = null;
+    if (!this.isPrompting()) return;
+    this.promptConfirm.blur();
+    this.root.classList.remove('prompting');
+    this.prompt.inert = true;
+    this.fold();
+  }
+
+  /** While the answer is being acted on: buttons off, confirm says so. */
+  setPromptBusy(busy: boolean): void {
+    this.promptConfirm.disabled = busy;
+    this.promptCancel.disabled = busy;
+    this.promptConfirm.textContent = busy ? 'Opening...' : 'Open and burn';
   }
 
   toggle(): void {
@@ -210,7 +284,11 @@ export class CommandPalette {
       prev.focus({ preventScroll: true });
     }
 
-    // Animate back to the folded content size, then return to auto sizing.
+    this.fold();
+  }
+
+  /** Animate back to the folded content size, then return to auto sizing. */
+  private fold(): void {
     // The open panel is much larger than the pill: a pointer over it "hovers"
     // now but will be outside once folded. Fold straight to the plain pill
     // then, with hover styling off until the fold is done, instead of to the
@@ -223,7 +301,7 @@ export class CommandPalette {
     this.root.style.width = `${folded.width}px`;
     this.root.style.height = `${folded.height}px`;
     const release = () => {
-      if (this.isOpen()) return;
+      if (this.isOpen() || this.isPrompting()) return;
       this.root.classList.remove('hover-off');
       this.root.style.width = '';
       this.root.style.height = '';

@@ -111,8 +111,9 @@ curl --data-binary @secret.txt "https://your-worker.dev/documents?expires=3d&bur
   (one atomic `DELETE ... RETURNING`, so two readers never both get it). That response has
   `"burn": true` and `Cache-Control: no-store`; later reads are `404`. `HEAD` and
   `GET /documents/KEY?peek=1` do not consume it: the latter returns `{"key", "burnPending": true}`
-  without content. The page URL (`/KEY`) never reads it either; the browser shows a "Reveal and
-  destroy" prompt, so link previews and prefetchers cannot burn it.
+  without content. The page URL (`/KEY`) never reads it either: the palette pill turns into an
+  "Open and burn" question, and only that answer reads it, so link previews and prefetchers
+  cannot burn it. If that read fails (offline, server error), the paste is left intact.
 - Built-in pages such as `about` work on both and carry `"frozen": true`.
 - Other methods on these routes return `405` with an `Allow` header.
 

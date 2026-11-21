@@ -313,49 +313,6 @@ body {
     display: flex;
 }
 
-#burn-gate {
-    display: flex;
-    justify-content: center;
-    padding-top: 20vh;
-}
-
-#burn-gate[hidden] {
-    display: none;
-}
-
-.burn-gate-plaque {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    padding: 24px 36px;
-    background: var(--color-key-bg);
-    color: var(--color-editor-text);
-    font-family: var(--font-ui);
-    font-size: var(--font-size-editor);
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-}
-
-.burn-gate-plaque p {
-    margin: 0;
-}
-
-#burn-reveal {
-    padding: 6px 16px;
-    border: 0;
-    border-radius: 11px;
-    background: var(--color-accent);
-    color: var(--color-text-bright);
-    font: bold 12px var(--font-ui);
-    cursor: pointer;
-}
-
-#burn-reveal:focus-visible {
-    outline: 1px solid var(--color-accent);
-    outline-offset: 2px;
-}
-
 .drop-overlay-plaque {
     padding: 20px 36px;
     background: var(--color-key-bg);
