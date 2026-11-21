@@ -308,13 +308,88 @@ body {
     pointer-events: none;
 }
 
-/* --- hide elements for printing --- */
-.no-print {}
+/* --- printing ---------------------------------------------------------------
+   Printing shows only #print-listing (print-listing.ts builds it on
+   beforeprint): one row per line, so long lines wrap under their own number.
+   Plain black text; no syntax colors on paper. */
+#print-listing {
+    display: none;
+}
 
 @media print {
-	.no-print {
-		display: none !important;
-	}
+    @page {
+        size: auto;
+        margin: 16mm 14mm 16mm 14mm;
+
+        @top-left,
+        @top-right,
+        @bottom-right {
+            font-family: var(--font-ui);
+            font-size: 8pt;
+            color: #555;
+        }
+
+        @bottom-right {
+            content: counter(page) " / " counter(pages);
+        }
+    }
+
+    html,
+    body {
+        height: auto;
+        background: #fff !important;
+    }
+
+    body {
+        padding: 0;
+    }
+
+    body > :not(#print-listing),
+    .no-print {
+        display: none !important;
+    }
+
+    #print-listing {
+        display: block;
+        color: #000;
+        font-family: var(--font-editor);
+        font-size: 8.5pt;
+        line-height: 1.4;
+        tab-size: 2; /* as on screen */
+    }
+
+    .pl-row {
+        display: flex;
+        break-inside: avoid;
+    }
+
+    .pl-num {
+        flex: none;
+        box-sizing: content-box;
+        width: calc(var(--print-digits) * 1ch);
+        padding-right: 2.5mm;
+        margin-right: 3mm;
+        border-right: 0.5pt solid #bbb;
+        text-align: right;
+        color: #777;
+        user-select: none;
+    }
+
+    .no-numbers .pl-num {
+        display: none;
+    }
+
+    .pl-code {
+        flex: 1;
+        min-width: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    /* An empty line still takes its row height. */
+    .pl-code:empty::before {
+        content: " ";
+    }
 }
 
 

@@ -16,6 +16,7 @@ import { ViewerFind, type FindStatus } from './viewer-find';
 import type { Highlighted } from './highlight-config';
 import { clearSyntax, paintSyntax, supportsHighlights, viewerText } from './syntax-highlights';
 import { currentTheme } from './highlight-theme';
+import { PrintListing, type PrintSource } from './print-listing';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
@@ -70,6 +71,23 @@ export class ViewManager {
     if (this.highlightCurrentLine) {
       this.lineHighlight = document.getElementById('line-highlight') as HTMLDivElement;
     }
+
+    new PrintListing(() => this.printSource());
+  }
+
+  /** What to print: the viewer's or the editor's text; nothing behind a gate. */
+  private printSource(): PrintSource | null {
+    const numbers = this.lineNumbers;
+    if (this.viewer.style.display !== 'none') {
+      const text = this.viewerCode.textContent ?? '';
+      if (text === '' || this.viewer.classList.contains('is-loading')) return null;
+      return { text, numbers };
+    }
+    if (this.editor.style.display !== 'none') {
+      if (this.editor.value === '') return null;
+      return { text: viewerText(this.editor.value), numbers };
+    }
+    return null;
   }
 
   /**
