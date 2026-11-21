@@ -21,6 +21,8 @@ import './solarized-dark-hljs.css';
 export interface ViewCallbacks {
   onContentInput: (content: string) => void;
   onFileDrop: (content: string) => void;
+  /** The reader confirmed reading an unread burn-after-reading paste. */
+  onBurnReveal: () => void;
 }
 
 export interface RenderOptions {
@@ -38,6 +40,7 @@ export class ViewManager {
   private viewer: HTMLPreElement;
   private viewerCode: HTMLElement;
   private gutter: HTMLDivElement;
+  private burnGate: HTMLElement;
   private appName: string;
   private lineNumbers: boolean;
   private callbacks?: ViewCallbacks;
@@ -59,6 +62,7 @@ export class ViewManager {
     this.viewer = document.getElementById('viewer') as HTMLPreElement;
     this.viewerCode = this.viewer.querySelector('code') as HTMLElement;
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
+    this.burnGate = document.getElementById('burn-gate') as HTMLElement;
     this.finder = new ViewerFind(this.viewerCode, this.viewer);
 
     this.lineNumbers = options.lineNumbers;
@@ -87,6 +91,9 @@ export class ViewManager {
     this.setupLineHighlightListeners();
     this.initZoom();
     this.setupDragDropHandlers();
+    document
+      .getElementById('burn-reveal')
+      ?.addEventListener('click', () => this.callbacks?.onBurnReveal());
   }
 
   /**
@@ -161,6 +168,7 @@ export class ViewManager {
   renderFullState(state: Paste, mode: 'editing' | 'presenting', highlighted?: Highlighted): void {
     this.finder.clear();
     clearSyntax();
+    this.burnGate.hidden = true;
     this.editor.classList.remove('is-loading');
     this.viewer.classList.remove('is-loading');
 
@@ -208,12 +216,31 @@ export class ViewManager {
 
   renderLoadingState(): void {
     clearSyntax();
+    this.burnGate.hidden = true;
     this.editor.style.display = 'none';
     this.viewer.style.display = 'block';
     this.viewer.classList.add('is-loading');
     this.viewerCode.textContent = '';
     this.gutter.textContent = '';
     this.resetLineHighlight();
+  }
+
+  /**
+   * Ask before reading an unread burn-after-reading paste: nothing of it is
+   * shown (it has not been fetched), only the gate with its reveal button.
+   */
+  renderBurnGate(): void {
+    this.finder.clear();
+    this.editor.value = '';
+    this.editor.style.display = 'none';
+    this.viewer.style.display = 'none';
+    this.viewer.classList.remove('is-loading');
+    this.viewerCode.textContent = '';
+    this.gutter.textContent = '';
+    this.resetLineHighlight();
+    document.title = this.appName;
+    this.burnGate.hidden = false;
+    document.getElementById('burn-reveal')?.focus({ preventScroll: true });
   }
 
   /**

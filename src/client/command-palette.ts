@@ -41,6 +41,7 @@ interface Row {
 const MENU_TITLES: Record<string, string> = {
   language: 'Language',
   recent: 'Recent',
+  expiry: 'Expires',
 };
 
 const COLLAPSE_FALLBACK_MS = 650;
@@ -270,6 +271,11 @@ export class CommandPalette {
     this.root.dataset.mode = mode;
   }
 
+  /** Save chip text, e.g. "Save (1w, burn)" for non-default save options. */
+  setSaveLabel(text: string): void {
+    if (this.saveBtn.textContent !== text) this.saveBtn.textContent = text;
+  }
+
   setSaveEnabled(enabled: boolean): void {
     this.saveBtn.disabled = !enabled;
     this.saveBtn.setAttribute('aria-hidden', String(!enabled));
@@ -440,6 +446,10 @@ export class CommandPalette {
         }
         if (cmd.prefill !== undefined) {
           this.setInput(cmd.prefill);
+          return true;
+        }
+        if (cmd.keepOpen) {
+          this.host.run(cmd.id);
           return true;
         }
         this.close();

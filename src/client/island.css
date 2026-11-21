@@ -167,10 +167,12 @@
     color: var(--color-text-bright);
     font-weight: bold;
     font-size: 11px;
+    white-space: nowrap;
 }
 
+/* Room for the lifetime and burn suffix, e.g. "Save (1mo, burn)". */
 .island-hint .island-save:not(:disabled) {
-    max-width: 60px;
+    max-width: 140px;
     opacity: 1;
     margin-right: 6px;
     padding: 0 9px;
