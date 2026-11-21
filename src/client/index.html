@@ -54,6 +54,13 @@
 				aria-label="Paste content" aria-describedby="editor-help"
 				placeholder="Paste your code here..."></textarea>
 		</div>
+		<!-- Unread burn-after-reading paste: reading destroys it, so ask first. -->
+		<div id="burn-gate" hidden>
+			<div class="burn-gate-plaque" role="group" aria-labelledby="burn-gate-title">
+				<p id="burn-gate-title">This paste will be destroyed after you read it.</p>
+				<button type="button" id="burn-reveal">Reveal and destroy</button>
+			</div>
+		</div>
 		<p id="editor-help" class="visually-hidden">Tab inserts spaces. Press Escape, then Tab, to move focus out of the editor.</p>
 		<div id="drop-overlay" aria-hidden="true">
 			<div class="drop-overlay-plaque">Drop file to editor</div>

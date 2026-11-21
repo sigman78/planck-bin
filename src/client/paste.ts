@@ -3,11 +3,19 @@
  *
  */
 
+/**
+ * Burn after reading: 'armed' is the creator's just-saved paste (the first
+ * read will destroy it), 'pending' an unread one behind the reveal gate (no
+ * content loaded), 'burned' a revealed one (already gone on the server).
+ */
+export type BurnState = 'armed' | 'pending' | 'burned';
+
 export class Paste {
   content: string = '';
   key?: string;
   language?: string;
   frozen: boolean = false;
+  burn?: BurnState;
 
   get isLoaded(): boolean {
     return this.key !== undefined;
@@ -18,12 +26,20 @@ export class Paste {
     this.key = undefined;
     this.language = undefined;
     this.frozen = false;
+    this.burn = undefined;
   }
 
-  apply(data: { content: string; key?: string; language?: string; frozen?: boolean }): void {
+  apply(data: {
+    content: string;
+    key?: string;
+    language?: string;
+    frozen?: boolean;
+    burn?: BurnState;
+  }): void {
     this.content = data.content;
     this.key = data.key;
     this.language = data.language;
     this.frozen = data.frozen ?? false;
+    this.burn = data.burn;
   }
 }
