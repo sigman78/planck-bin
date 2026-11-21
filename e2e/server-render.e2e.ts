@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { setupMockApi } from './helpers/mock-api';
 import { S } from './helpers/selectors';
+import { syntaxHighlightCount, paintedTexts } from './helpers/syntax';
 import { expectCommand } from './helpers/palette';
 import { renderDocumentPage, renderNotFoundPage } from '../src/worker/render';
 import type { GetResponse } from '../src/shared/types';
@@ -68,7 +69,9 @@ test.describe('Server-rendered paste page', () => {
 
     await page.goto('/tavelu-hasoq.js');
     await expect(page.locator(S.island)).toHaveAttribute('data-mode', 'presenting');
-    await expect(page.locator(`${S.viewer} code .hljs-keyword`).first()).toHaveText('const');
+    await expect.poll(() => paintedTexts(page)).toContain('const');
+    // The server-rendered text node is kept: no per-token elements.
+    expect(await page.locator(`${S.viewer} code`).evaluate((el) => el.childNodes.length)).toBe(1);
     await expect(page.locator(`${S.viewer} code`)).toHaveText(HOSTILE);
     await expect(page.locator(`${S.viewer} b`)).toHaveCount(0);
 
@@ -78,13 +81,36 @@ test.describe('Server-rendered paste page', () => {
     await expect(page).toHaveTitle('Planck Bin - tavelu-hasoq');
   });
 
+  test('a CRLF paste keeps the server text node and selects as LF', async ({ page }) => {
+    await setupMockApi(page);
+    // No trailing newline: Selection.toString() drops a final one anyway.
+    const content = 'const a = 1;\r\n// note\r\nconst b = 2;';
+    await serveRendered(page, '/tavelu-hasoq.js', { key: 'tavelu-hasoq', content });
+
+    await page.goto('/tavelu-hasoq.js');
+    await expect.poll(() => paintedTexts(page)).toContain('// note');
+    const shown = await page.locator(`${S.viewer} code`).evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return {
+        nodes: el.childNodes.length,
+        hasCR: el.textContent!.includes('\r'),
+        selected: selection.toString(),
+      };
+    });
+    expect(shown).toEqual({ nodes: 1, hasCR: false, selected: content.replace(/\r\n/g, '\n') });
+  });
+
   test('the URL extension still picks the language', async ({ page }) => {
     await setupMockApi(page);
     await serveRendered(page, '/tavelu-hasoq.txt', { key: 'tavelu-hasoq', content: HOSTILE });
 
     await page.goto('/tavelu-hasoq.txt');
     await expect(page.locator(`${S.viewer} code`)).toHaveText(HOSTILE);
-    await expect(page.locator(`${S.viewer} code .hljs-keyword`)).toHaveCount(0);
+    expect(await syntaxHighlightCount(page)).toBe(0);
   });
 
   test('a later navigation fetches as usual', async ({ page }) => {

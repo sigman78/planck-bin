@@ -1,10 +1,12 @@
 /**
  * ViewerFind - find-in-paste for the read-only viewer.
  *
- * Matches are painted with the CSS Custom Highlight API when available
- * (no DOM mutation of the highlighted code); otherwise the current match is
- * selected with the regular text selection.
+ * The viewer holds the paste as one text node; matches are painted over it
+ * with the CSS Custom Highlight API, above the syntax highlights. Without the
+ * API, the current match is shown with the regular text selection instead.
  */
+
+import { supportsHighlights } from './syntax-highlights';
 
 export interface FindStatus {
   current: number;
@@ -29,13 +31,6 @@ export function findOffsets(text: string, query: string, limit = MAX_MATCHES): n
   return offsets;
 }
 
-interface TextSpan {
-  node: Text;
-  start: number;
-}
-
-const supportsHighlights = () => typeof CSS !== 'undefined' && 'highlights' in CSS;
-
 /** The registry is map-like at runtime; older DOM typings omit the Map methods. */
 const highlightRegistry = () => CSS.highlights as unknown as Map<string, Highlight>;
 
@@ -55,11 +50,15 @@ export class ViewerFind {
 
   search(query: string): FindStatus {
     this.clear();
-    if (query === '') return this.status();
+    const text = this.root.firstChild;
+    if (query === '' || !(text instanceof Text)) return this.status();
 
-    const spans = this.collectText();
-    const text = spans.map((s) => s.node.data).join('');
-    this.ranges = this.rangesFor(spans, findOffsets(text, query), query.length);
+    this.ranges = findOffsets(text.data, query).map((start) => {
+      const range = new Range();
+      range.setStart(text, start);
+      range.setEnd(text, start + query.length);
+      return range;
+    });
     if (this.ranges.length > 0) {
       this.index = 0;
       this.paint();
@@ -92,51 +91,18 @@ export class ViewerFind {
     return { current: this.index + 1, total: this.ranges.length };
   }
 
-  private collectText(): TextSpan[] {
-    const spans: TextSpan[] = [];
-    const walker = document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
-    let offset = 0;
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const text = node as Text;
-      spans.push({ node: text, start: offset });
-      offset += text.data.length;
-    }
-    return spans;
-  }
-
-  /**
-   * Map sorted match offsets to Ranges in one forward pass over the text
-   * spans (a highlighted paste can have tens of thousands of nodes).
-   */
-  private rangesFor(spans: TextSpan[], starts: number[], length: number): Range[] {
-    let cursor = 0;
-    const locate = (offset: number, preferEnd: boolean) => {
-      while (cursor < spans.length - 1) {
-        const span = spans[cursor];
-        const spanEnd = span.start + span.node.data.length;
-        if (offset < spanEnd || (preferEnd && offset === spanEnd)) break;
-        cursor++;
-      }
-      const span = spans[cursor];
-      return { node: span.node, offset: Math.min(offset - span.start, span.node.data.length) };
-    };
-    return starts.map((start) => {
-      const from = locate(start, false);
-      const to = locate(start + length, true);
-      const range = document.createRange();
-      range.setStart(from.node, from.offset);
-      range.setEnd(to.node, to.offset);
-      return range;
-    });
-  }
-
   private paint(): void {
     const current = this.ranges[this.index];
     if (!current) return;
 
     if (supportsHighlights()) {
-      highlightRegistry().set(HL_ALL, new Highlight(...this.ranges));
-      highlightRegistry().set(HL_CURRENT, new Highlight(current));
+      // Above the syntax highlights (priority 0), which also set colors.
+      const all = new Highlight(...this.ranges);
+      const now = new Highlight(current);
+      all.priority = 1;
+      now.priority = 2;
+      highlightRegistry().set(HL_ALL, all);
+      highlightRegistry().set(HL_CURRENT, now);
     } else {
       const selection = window.getSelection();
       selection?.removeAllRanges();

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { setupMockApi } from '../e2e/helpers/mock-api';
 import { S } from '../e2e/helpers/selectors';
+import { paintedTexts } from '../e2e/helpers/syntax';
 
 const OUT = 'docs/media';
 const SAMPLE = readFileSync('src/worker/config.ts', 'utf8');
@@ -13,7 +14,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('haste-hint-stage', 'known'));
   await page.goto('/worker-config.ts');
   await expect(page.locator(S.viewer)).toContainText('export');
-  await expect(page.locator(`${S.viewer} .hljs-keyword`).first()).toBeVisible();
+  await expect.poll(() => paintedTexts(page)).toContain('export');
   // Wait out the page fade-in so the capture is not dimmed
   await page.waitForFunction(() =>
     document.getAnimations().every((a) => a.playState !== 'running')
