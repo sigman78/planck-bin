@@ -14,6 +14,7 @@ Pastebin for Cloudflare Workers with D1 storage. API compatible with haste-serve
 - Optional server-side rendering of paste pages.
 - Command palette (Ctrl+/) and keyboard shortcuts for all actions.
 - Same HTTP API as haste-server, so [haste-client](https://github.com/seejohnrun/haste-client) works.
+- Per-paste lifetime (3 days to permanent) and burn after reading.
 - Paste expiry with a nightly cleanup cron, rate limits, optional storage cap.
 - Local drafts and recent paste list in the browser.
 
@@ -38,6 +39,9 @@ pnpm db:migrate:remote
 pnpm run deploy   # "pnpm deploy" is a built-in pnpm command
 ```
 
+When upgrading, apply new migrations (`pnpm db:migrate:remote`) before deploying the worker: the
+code reads columns that older databases do not have yet.
+
 Your instance will be live at `https://planck-bin.YOUR-SUBDOMAIN.workers.dev`.
 
 ## Config
@@ -49,7 +53,8 @@ Edit `wrangler.toml` vars:
 | `MAX_PASTE_SIZE`        | 400000        | Max paste size in bytes                                        |
 | `KEY_LENGTH`            | 10            | Length of paste IDs                                            |
 | `KEY_STRATEGY`          | pronounceable | Paste ID format: `pronounceable`, URL-safe `random`, or `uuid` |
-| `DEFAULT_EXPIRE_DAYS`   | 30            | Days until expiration                                          |
+| `DEFAULT_EXPIRE_DAYS`   | 30            | Days until expiration when the client picks no lifetime        |
+| `MAX_EXPIRE_DAYS`       | 0             | Cap on any lifetime, including permanent; 0 = no cap           |
 | `BROWSER_CACHE_MAX_AGE` | 0             | Browser cache for API reads, seconds, capped at paste expiry   |
 | `SERVER_RENDER`         | false         | Render paste pages on the worker (see below)                   |
 | `COUNT_VIEWS`           | false         | Count paste views in D1 (costs one database write per read)    |
@@ -60,8 +65,8 @@ entropy per character; UUID IDs use `crypto.randomUUID()` and ignore `KEY_LENGTH
 Creation and read limits are configured by the two `ratelimits` bindings in `wrangler.toml`.
 
 Numeric settings are clamped to safe ranges: `MAX_PASTE_SIZE` 1 to 1,900,000 (under D1's 2 MB row
-limit), `KEY_LENGTH` 6 to 48, `DEFAULT_EXPIRE_DAYS` 0 (never) to 36,500, and `BROWSER_CACHE_MAX_AGE`
-0 to one year. A value that is not a plain integer falls back to the default.
+limit), `KEY_LENGTH` 6 to 48, `DEFAULT_EXPIRE_DAYS` and `MAX_EXPIRE_DAYS` 0 to 36,500, and
+`BROWSER_CACHE_MAX_AGE` 0 to one year. A value that is not a plain integer falls back to the default.
 
 `MAX_STORAGE_MB` is a coarse safety valve, not a quota. Keep these limits in mind:
 
@@ -72,7 +77,8 @@ limit), `KEY_LENGTH` 6 to 48, `DEFAULT_EXPIRE_DAYS` 0 (never) to 36,500, and `BR
   roughly 12 MB/min at the default) can fill a small budget in minutes. Then every user gets
   `507` until the cleanup cron deletes enough expired pastes, which with the default 30-day
   expiry can take weeks. Size the budget well above the expected churn, or pair it with a
-  shorter `DEFAULT_EXPIRE_DAYS`.
+  shorter `DEFAULT_EXPIRE_DAYS`. Permanent pastes never free space; set `MAX_EXPIRE_DAYS` on a
+  public instance to keep every paste expiring.
 - `507` is a WebDAV status, so generic haste clients will show it as an unknown error.
 
 With `SERVER_RENDER` on, a paste URL (`/key` or `/key.ext`) comes back with the paste already in
@@ -88,13 +94,25 @@ page, which is exactly the client-rendered path you get with the flag off.
 curl -X POST https://your-worker.dev/documents -H "Content-Type: text/plain" -d "code here"
 curl https://your-worker.dev/documents/KEY
 curl https://your-worker.dev/raw/KEY
+curl --data-binary @secret.txt "https://your-worker.dev/documents?expires=3d&burn=1"
 ```
 
-- `POST /documents` takes `text/plain` or JSON `{"content": "..."}` and returns `201 {"key"}`;
-  `413` when over `MAX_PASTE_SIZE`, `507` when the database has reached `MAX_STORAGE_MB`.
+- `POST /documents` takes `text/plain` or JSON `{"content": "..."}` and returns
+  `201 {"key", "expiresAt"}`; `413` when over `MAX_PASTE_SIZE`, `507` when the database has
+  reached `MAX_STORAGE_MB`. Optional query parameters:
+  - `expires=3d|1w|1mo|6mo|never`: lifetime (default `DEFAULT_EXPIRE_DAYS`, capped by
+    `MAX_EXPIRE_DAYS`). Other values return `400`.
+  - `burn=1`: burn after reading. The response then carries `"burn": true`.
 - `GET /documents/KEY` returns `{"key", "content", "createdAt", "expiresAt"}` (ISO 8601, `null`
   for none) with an `ETag`; `If-None-Match` gets `304`.
 - `GET /raw/KEY` returns the text as `text/plain`.
+- Expired pastes return `404` on both, even before the cleanup cron removes them.
+- A burn-after-reading paste is deleted by its first `GET` on `/documents/KEY` or `/raw/KEY`
+  (one atomic `DELETE ... RETURNING`, so two readers never both get it). That response has
+  `"burn": true` and `Cache-Control: no-store`; later reads are `404`. `HEAD` and
+  `GET /documents/KEY?peek=1` do not consume it: the latter returns `{"key", "burnPending": true}`
+  without content. The page URL (`/KEY`) never reads it either; the browser shows a "Reveal and
+  destroy" prompt, so link previews and prefetchers cannot burn it.
 - Built-in pages such as `about` work on both and carry `"frozen": true`.
 - Other methods on these routes return `405` with an `Allow` header.
 
@@ -111,7 +129,10 @@ palette. Type to filter commands, then press Enter.
 | `:42`   | Go to line 42                                       |
 | `?text` | Find text in the paste; Enter / Shift+Enter to step |
 
-It also switches the highlighting language and lists recent pastes kept in this browser.
+It also switches the highlighting language and lists recent pastes kept in this browser. While
+editing, **Expires** picks the lifetime of new pastes (remembered in this browser) and **Burn
+after reading** makes the next save a one-time paste. Non-default choices show on the Save chip,
+e.g. `Save (1w, burn)`. Burn pastes are not added to the recent list.
 
 ## Shortcuts
 

@@ -34,6 +34,13 @@ describe('embedded document', () => {
     expect(m.takeEmbeddedDocument('gone')).toBeNull();
   });
 
+  it('reports a burn-pending marker, which is not a document to show', () => {
+    const m = load({ key: 'secret', burnPending: true });
+    expect(m.hasEmbeddedDocument('secret')).toBe(false);
+    expect(m.takeEmbeddedDocument('secret')).toBe('burn-pending');
+    expect(m.takeEmbeddedDocument('secret')).toBeNull();
+  });
+
   it('ignores a marker for another key', () => {
     const m = load({ key: 'gone', notFound: true });
     expect(m.takeEmbeddedDocument('abc')).toBeNull();
