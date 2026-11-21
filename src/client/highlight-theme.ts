@@ -15,7 +15,9 @@
  * The theme stylesheet itself stays loaded as published: its .hljs root rule
  * styles the <code class="hljs"> element natively, its token rules match
  * nothing in the DOM and are only read here. Properties ::highlight() cannot
- * paint (font-weight, font-style, padding, border-radius) are dropped.
+ * paint (font-weight, font-style, padding, border-radius) are dropped, and so
+ * are rules whose selectors need more than descendant and child combinators
+ * over tags and classes (:hover, :not(), sibling combinators).
  */
 
 import type { RangeEmitter, ScopeNode, TokenSpans } from './syntax-highlights';
@@ -34,17 +36,22 @@ interface ChainElement {
 interface Compound {
   tag?: string;
   classes: string[];
+  /** How this compound relates to the one before it: descendant or child. */
+  child: boolean;
 }
 
 interface TokenRule {
-  /** Descendant chain, outermost first; the last one matches the token. */
+  /** Compound chain, outermost first; the last one matches the token. */
   compounds: Compound[];
   specificity: number;
   order: number;
   declarations: [string, string][];
 }
 
-const UNSUPPORTED = /[>+~:[\]#*()|\\"']/;
+/** Values that leave a property to the enclosing span. */
+const DEFERS = /^(inherit|unset)$/i;
+
+const UNSUPPORTED = /[+~:[\]#*()|\\"']/;
 const COMPOUND = /^([a-zA-Z][\w-]*)?((?:\.[\w-]+)*)$/;
 
 /** Parse one selector; null when it is not a plain token selector. */
@@ -52,13 +59,25 @@ function parseSelector(selector: string): Pick<TokenRule, 'compounds' | 'specifi
   if (selector === '' || UNSUPPORTED.test(selector)) return null;
   const compounds: Compound[] = [];
   let specificity = 0;
-  for (const part of selector.split(/\s+/)) {
+  let child = false;
+  const parts = selector
+    .replace(/\s*>\s*/g, ' > ')
+    .trim()
+    .split(/\s+/);
+  for (const part of parts) {
+    if (part === '>') {
+      if (child || compounds.length === 0) return null;
+      child = true;
+      continue;
+    }
     const match = COMPOUND.exec(part);
     if (!match || part === '') return null;
     const classes = match[2] ? match[2].slice(1).split('.') : [];
-    compounds.push({ tag: match[1]?.toLowerCase(), classes });
+    compounds.push({ tag: match[1]?.toLowerCase(), classes, child });
     specificity += classes.length * 256 + (match[1] ? 1 : 0);
+    child = false;
   }
+  if (child) return null;
   const last = compounds[compounds.length - 1];
   if (!last.classes.some((c) => c.startsWith('hljs-'))) return null;
   return { compounds, specificity };
@@ -74,17 +93,20 @@ const matches = (compound: Compound, el: ChainElement) =>
   (compound.tag === undefined || compound.tag === el.tag) &&
   compound.classes.every((c) => el.classes.includes(c));
 
-/** Descendant-only selector match for chain[index] (greedy is exact here). */
+/** Whether compounds[0..k] match with compounds[k] on chain[at]. */
+function matchFrom(compounds: Compound[], k: number, chain: ChainElement[], at: number): boolean {
+  if (!matches(compounds[k], chain[at])) return false;
+  if (k === 0) return true;
+  if (compounds[k].child) return at > 0 && matchFrom(compounds, k - 1, chain, at - 1);
+  // Descendant: any ancestor may match; backtrack because a later child
+  // combinator can pin an earlier compound.
+  for (let j = at - 1; j >= 0; j--) if (matchFrom(compounds, k - 1, chain, j)) return true;
+  return false;
+}
+
+/** Descendant and child selector match for chain[index]. */
 function ruleMatches(rule: TokenRule, chain: ChainElement[], index: number): boolean {
-  const { compounds } = rule;
-  if (!matches(compounds[compounds.length - 1], chain[index])) return false;
-  let at = index - 1;
-  for (let k = compounds.length - 2; k >= 0; k--) {
-    while (at >= 0 && !matches(compounds[k], chain[at])) at--;
-    if (at < 0) return false;
-    at--;
-  }
-  return true;
+  return matchFrom(rule.compounds, rule.compounds.length - 1, chain, index);
 }
 
 /** Style rules from sheets, recursing into applicable grouping rules. */
@@ -174,7 +196,10 @@ export class HighlightTheme {
         .sort((a, b) => a.specificity - b.specificity || a.order - b.order);
       const own = new Map<string, string>();
       for (const rule of matched) for (const [p, v] of rule.declarations) own.set(p, v);
-      for (const [p, v] of own) if (!style.has(p)) style.set(p, v);
+      // inherit/unset: this span takes the value from its ancestors, which
+      // are resolved further up this loop. For the non-inherited properties
+      // the ancestor's background or decoration shows through, the same.
+      for (const [p, v] of own) if (!style.has(p) && !DEFERS.test(v)) style.set(p, v);
     }
     return PROPERTIES.filter((p) => style.has(p))
       .map((p) => `${p}: ${style.get(p)};`)

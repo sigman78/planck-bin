@@ -13,22 +13,37 @@ function compile(css: string): HighlightTheme {
   return HighlightTheme.fromSheets(Array.from(document.styleSheets));
 }
 
-/** Declarations painted on each token text ('' for base text). */
-function painted(theme: HighlightTheme, content: string, language?: string) {
-  const runs = highlightContent(content, language).highlighted.runs!;
-  const spans = theme.spans(runs);
+/** Token runs as [start, end, declarations] triples. */
+function paintedRuns(theme: HighlightTheme, content: string, language?: string) {
+  const spans = theme.spans(highlightContent(content, language).highlighted.runs!);
   const decls = new Map<string, string>();
   for (const line of theme.css.trim().split('\n')) {
     const m = /^::highlight\(([\w-]+)\) \{ (.*) \}$/.exec(line);
     if (m) decls.set(m[1], m[2]);
   }
-  const out = new Map<string, string>();
+  const out: [number, number, string][] = [];
   for (const [name, offsets] of spans) {
-    for (let i = 0; i < offsets.length; i += 2) {
-      out.set(content.slice(offsets[i], offsets[i + 1]), decls.get(name)!);
-    }
+    for (let i = 0; i < offsets.length; i += 2)
+      out.push([offsets[i], offsets[i + 1], decls.get(name)!]);
   }
+  return out;
+}
+
+/** Declarations painted on each token text ('' for base text). */
+function painted(theme: HighlightTheme, content: string, language?: string) {
+  const out = new Map<string, string>();
+  for (const [start, end, d] of paintedRuns(theme, content, language))
+    out.set(content.slice(start, end), d);
   return (text: string) => out.get(text) ?? '';
+}
+
+/** Declarations painted over the first occurrence of text, even inside a merged run. */
+function paintedAt(theme: HighlightTheme, content: string, language?: string) {
+  const runs = paintedRuns(theme, content, language);
+  return (text: string) => {
+    const at = content.indexOf(text);
+    return runs.find(([start, end]) => start <= at && at + text.length <= end)?.[2] ?? '';
+  };
 }
 
 describe('HighlightTheme with the bundled Solarized theme', () => {
@@ -107,5 +122,34 @@ describe('HighlightTheme with a stock-style theme', () => {
 
   it('is empty when no token rules are loaded', () => {
     expect(compile('.hljs { color: red }').empty).toBe(true);
+  });
+
+  it('resolves inherit against the enclosing token', () => {
+    const theme = compile('.hljs-tag { color: blue } .hljs-attr { color: inherit }');
+    expect(paintedAt(theme, '<a href="x">', 'xml')('href')).toBe('color: blue;');
+    expect(theme.css).not.toContain('inherit');
+  });
+
+  it('lets inherit override a weaker own rule', () => {
+    const theme = compile(
+      '.hljs-tag { color: blue } .hljs-attr { color: red } .hljs-tag .hljs-attr { color: inherit }'
+    );
+    expect(paintedAt(theme, '<a href="x">', 'xml')('href')).toBe('color: blue;');
+  });
+
+  it('matches child combinators', () => {
+    const theme = compile(
+      'code > .hljs-keyword { color: red } pre > .hljs-keyword { color: green }' +
+        ' .hljs-tag>.hljs-attr { color: blue } code > .hljs-attr { color: olive }'
+    );
+    expect(painted(theme, 'let a;', 'javascript')('let')).toBe('color: red;');
+    expect(paintedAt(theme, '<a href="x">', 'xml')('href')).toBe('color: blue;');
+  });
+
+  it('skips selectors it cannot evaluate', () => {
+    const theme = compile(
+      '.hljs-keyword { color: red } .hljs-keyword:hover { color: blue } > .hljs-keyword { color: green }'
+    );
+    expect(painted(theme, 'let a;', 'javascript')('let')).toBe('color: red;');
   });
 });
