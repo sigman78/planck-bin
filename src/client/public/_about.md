@@ -22,6 +22,8 @@ press Enter.
 - **?text** - find text in the paste (Enter / Shift+Enter for next / previous)
 - **Switch language** - change syntax highlighting
 - **Recent pastes** - pastes you saved or opened in this browser (stored only locally)
+- **Expires** - how long new pastes are kept (while editing)
+- **Burn after reading** - make the next paste readable only once (while editing)
 
 ## Keyboard Shortcuts
 
@@ -48,11 +50,21 @@ come back later, and your unsaved text is restored.
 
 ## Duration
 
-Pastes are stored for 30 days from their creation date.
+Pastes are stored for 30 days from their creation date unless you pick another lifetime with
+**Expires** in the command palette: 3 days, 1 week, 1 month, 6 months or permanent. The choice is
+remembered in your browser. An instance may cap the longest lifetime.
+
+## Burn After Reading
+
+Turn on **Burn after reading** before saving to create a paste that can be read once. Whoever opens
+the link is asked first; clicking **Open and burn** shows the paste and deletes it from the server,
+and the link stops working. Nothing of the paste reaches the browser before that click. Link previews in chat apps do not count as a read. Reading
+it through `/raw/` or the API deletes it right away.
 
 ## Privacy
 
-There should be no expectation of privacy. Post things at your own risk.
+There should be no expectation of privacy. Post things at your own risk. Burn after reading
+limits how long a paste lives, but pastes are not encrypted.
 Not responsible for any loss of data or removed pastes.
 
 ## Technology

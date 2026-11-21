@@ -13,6 +13,42 @@ const ids = (ctx: Partial<CommandContext>) =>
   availableCommands({ ...base, ...ctx }).map((c) => c.id);
 
 describe('availableCommands', () => {
+  it('offers save options only while editing', () => {
+    expect(ids({ mode: 'editing' })).toEqual(expect.arrayContaining(['expiry', 'burn']));
+    expect(ids({})).not.toContain('expiry');
+    expect(ids({})).not.toContain('burn');
+  });
+
+  it('shows the chosen save options', () => {
+    const find = (id: string, ctx: Partial<CommandContext>) =>
+      availableCommands({ ...base, mode: 'editing', ...ctx }).find((c) => c.id === id)!;
+    expect(find('expiry', {}).hint).toBe('default');
+    expect(find('expiry', { lifetimeLabel: '1 week' }).hint).toBe('1 week');
+    // The burn label names the action it will perform; on, it carries the flame.
+    const off = find('burn', {});
+    expect(off).toMatchObject({ label: 'Burn after reading', hint: undefined, icon: undefined });
+    const on = find('burn', { burnNext: true });
+    expect(on).toMatchObject({ label: "Don't burn after reading", hint: undefined, icon: 'burn' });
+  });
+
+  it('never offers a read that would destroy a burn paste', () => {
+    for (const burn of ['armed', 'pending', 'burned'] as const) {
+      expect(ids({ burn })).not.toContain('raw');
+      expect(ids({ burn })).not.toContain('twitter');
+    }
+  });
+
+  it('hides content actions behind the burn gate and dead links once burned', () => {
+    const pending = ids({ burn: 'pending' });
+    expect(pending).not.toContain('duplicate');
+    expect(pending).not.toContain('find');
+    expect(pending).not.toContain('language');
+    expect(pending).toContain('copy-link');
+    expect(ids({ burn: 'armed' })).toContain('copy-link');
+    expect(ids({ burn: 'burned' })).not.toContain('copy-link');
+    expect(ids({ burn: 'burned' })).toContain('duplicate');
+  });
+
   it('offers paste actions while presenting', () => {
     expect(ids({})).toEqual([
       'save',

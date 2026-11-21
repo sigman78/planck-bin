@@ -8,6 +8,8 @@ export interface FakeRow {
   content: string;
   created_at: number;
   expires_at: number | null;
+  /** 1 = burn after reading. */
+  burn?: number;
 }
 
 export interface FakeEnvOptions {
@@ -28,6 +30,10 @@ export interface FakeEnv {
   contentChars: () => number;
   /** SQL of every run() call (writes, plus SELECT 1 size checks), in order. */
   writes: string[];
+  /** Every run() call with its bound arguments, in order. */
+  runs: { sql: string; args: unknown[] }[];
+  /** The fake table, mutated by DELETE ... RETURNING. */
+  rows: Record<string, FakeRow>;
   ctx: ExecutionContext;
 }
 
@@ -36,24 +42,40 @@ export function fakeEnv(options: FakeEnvOptions = {}): FakeEnv {
   const assets = options.assets ?? {};
   const lookups: string[] = [];
   const writes: string[] = [];
+  const runs: { sql: string; args: unknown[] }[] = [];
   let contentChars = 0;
+
+  // Mirrors the stores' `expires_at IS NULL OR expires_at > ?2` filter.
+  const live = (row: FakeRow, now: unknown) =>
+    row.expires_at === null || row.expires_at > Number(now);
 
   const statement = (sql: string, args: unknown[]) => ({
     async first() {
       if (options.dbError) throw new Error('D1 unavailable');
       const key = String(args[0]);
       lookups.push(key);
-      if (!/^\s*SELECT/i.test(sql)) return null;
       const row = rows[key];
-      if (!row) return null;
-      // getWithin: CASE WHEN LENGTH(content) <= ?3 THEN content END
+      // take: DELETE ... WHERE burn = 1 ... RETURNING
+      if (/^\s*DELETE/i.test(sql) && /RETURNING/i.test(sql)) {
+        if (!row || !row.burn || !live(row, args[1])) return null;
+        delete rows[key];
+        contentChars += row.content.length;
+        return { ...row, burn: 1 };
+      }
+      if (!/^\s*SELECT/i.test(sql)) return null;
+      if (!row || !live(row, args[1])) return null;
+      const burn = row.burn ?? 0;
+      // getWithin: CASE WHEN ... LENGTH(content) <= ?3 THEN content END
       const limited = /LENGTH\(content\) <= \?3/.test(sql);
-      const content = limited && row.content.length > Number(args[2]) ? null : row.content;
+      const hidden = burn === 1 && /CASE WHEN burn = 0/.test(sql);
+      const tooLarge = limited && row.content.length > Number(args[2]);
+      const content = hidden || tooLarge ? null : row.content;
       contentChars += content?.length ?? 0;
-      return { ...row, content };
+      return { ...row, burn, content };
     },
     async run() {
       writes.push(sql);
+      runs.push({ sql, args });
       return { meta: { changes: 1, size_after: options.sizeAfter ?? 0 } };
     },
   });
@@ -101,5 +123,5 @@ export function fakeEnv(options: FakeEnvOptions = {}): FakeEnv {
     props: {},
   } as unknown as ExecutionContext;
 
-  return { env, lookups, writes, ctx, contentChars: () => contentChars };
+  return { env, lookups, writes, runs, rows, ctx, contentChars: () => contentChars };
 }

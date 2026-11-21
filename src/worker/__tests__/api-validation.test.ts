@@ -87,6 +87,7 @@ describe('document API validation', () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual({
       key: expect.stringMatching(/^[A-Za-z0-9_-]{16}$/),
+      expiresAt: expect.any(String),
     });
   });
 });

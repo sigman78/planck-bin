@@ -238,6 +238,65 @@ async function testTooLargeDocument() {
   }
 }
 
+async function testLifetime() {
+  try {
+    const response = await fetch(`${BASE_URL}/documents?expires=3d`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'lifetime test',
+    });
+    const data = await response.json();
+    const days = (Date.parse(data.expiresAt) - Date.now()) / 86_400_000;
+    if (response.status === 201 && days > 2.9 && days <= 3) {
+      pass(`expires=3d sets expiresAt ${data.expiresAt}`);
+    } else {
+      fail(`expires=3d: status ${response.status}, expiresAt ${data.expiresAt}`);
+    }
+
+    const bad = await fetch(`${BASE_URL}/documents?expires=2d`, { method: 'POST', body: 'x' });
+    if (bad.status === 400) pass('Rejects an unknown lifetime (400)');
+    else fail(`Expected 400 for expires=2d, got ${bad.status}`);
+  } catch (error) {
+    fail('Lifetime test failed', error.message);
+  }
+}
+
+async function testBurnAfterReading() {
+  try {
+    const created = await fetch(`${BASE_URL}/documents?burn=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'burn test',
+    });
+    const { key, burn } = await created.json();
+    if (created.status === 201 && burn === true) pass(`Burn paste created: ${key}`);
+    else return fail(`Burn create: status ${created.status}, burn ${burn}`);
+
+    const peek = await (await fetch(`${BASE_URL}/documents/${key}?peek=1`)).json();
+    if (peek.burnPending === true && peek.content === undefined) pass('Peek reports it unread');
+    else fail('Peek returned content or no marker', JSON.stringify(peek));
+
+    const head = await fetch(`${BASE_URL}/raw/${key}`, { method: 'HEAD' });
+    if (head.status === 200) pass('HEAD does not consume');
+    else fail(`HEAD returned ${head.status}`);
+
+    // Two concurrent readers: exactly one gets it.
+    const reads = await Promise.all([
+      fetch(`${BASE_URL}/documents/${key}`),
+      fetch(`${BASE_URL}/documents/${key}`),
+    ]);
+    const statuses = reads.map((r) => r.status).sort();
+    if (statuses[0] === 200 && statuses[1] === 404) pass('Exactly one concurrent read wins');
+    else fail(`Concurrent reads returned ${statuses.join(', ')}`);
+
+    const after = await fetch(`${BASE_URL}/raw/${key}`);
+    if (after.status === 404) pass('Gone after the first read (404)');
+    else fail(`Expected 404 after the read, got ${after.status}`);
+  } catch (error) {
+    fail('Burn test failed', error.message);
+  }
+}
+
 // Main test runner
 async function runTests() {
   console.log('========================================');
@@ -291,6 +350,12 @@ async function runTests() {
   // Test 10: Too large document
   section('Test 10: Oversized Document Validation');
   await testTooLargeDocument();
+
+  section('Test 11: Paste Lifetime');
+  await testLifetime();
+
+  section('Test 12: Burn After Reading');
+  await testBurnAfterReading();
 
   // Summary
   console.log('\n========================================');

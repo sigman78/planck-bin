@@ -217,6 +217,22 @@ export class ViewManager {
   }
 
   /**
+   * Behind the burn prompt (the island asks): a blank page, since nothing of
+   * the paste has been fetched.
+   */
+  renderBurnGate(): void {
+    this.finder.clear();
+    this.editor.value = '';
+    this.editor.style.display = 'none';
+    this.viewer.style.display = 'none';
+    this.viewer.classList.remove('is-loading');
+    this.viewerCode.textContent = '';
+    this.gutter.textContent = '';
+    this.resetLineHighlight();
+    document.title = this.appName;
+  }
+
+  /**
    * Render metadata only (during editing - don't touch textarea)
    */
   renderUIState(state: Paste): void {

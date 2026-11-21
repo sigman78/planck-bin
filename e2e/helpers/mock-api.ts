@@ -4,7 +4,11 @@ export interface MockStore {
   get(key: string): string | undefined;
   set(key: string, content: string): void;
   setFrozen(key: string, content: string): void;
+  /** Store a burn-after-reading paste: the first non-peek GET deletes it. */
+  setBurn(key: string, content: string): void;
   lastKey(): string | undefined;
+  /** Query string of the last POST /documents (e.g. expires, burn). */
+  lastSaveParams(): URLSearchParams | undefined;
   failNextSave(): void;
   failNextLoad(): void;
 }
@@ -40,8 +44,10 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
 
   const docs = new Map<string, string>();
   const frozenKeys = new Set<string>();
+  const burnKeys = new Set<string>();
   let counter = 0;
   let lastSavedKey: string | undefined;
+  let lastParams: URLSearchParams | undefined;
   let saveShouldFail = false;
   let loadShouldFail = false;
 
@@ -52,7 +58,12 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
       docs.set(key, content);
       frozenKeys.add(key);
     },
+    setBurn: (key, content) => {
+      docs.set(key, content);
+      burnKeys.add(key);
+    },
     lastKey: () => lastSavedKey,
+    lastSaveParams: () => lastParams,
     failNextSave: () => {
       saveShouldFail = true;
     },
@@ -61,8 +72,8 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
     },
   };
 
-  // POST /documents -- create new paste
-  await page.route('**/documents', async (route) => {
+  // POST /documents[?expires=..&burn=1] -- create new paste
+  await page.route(/\/documents(\?.*)?$/, async (route) => {
     if (route.request().method() !== 'POST') {
       await route.continue();
       return;
@@ -73,13 +84,17 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
       return;
     }
     const content = route.request().postData() ?? '';
+    const params = new URL(route.request().url()).searchParams;
     const key = `testkey${counter++}`;
+    const burn = params.get('burn') === '1';
     docs.set(key, content);
+    if (burn) burnKeys.add(key);
     lastSavedKey = key;
+    lastParams = params;
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
-      body: JSON.stringify({ key }),
+      body: JSON.stringify({ key, expiresAt: null, ...(burn && { burn: true }) }),
     });
   });
 
@@ -97,7 +112,18 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
     const url = new URL(route.request().url());
     const key = url.pathname.split('/').pop() ?? '';
     const content = docs.get(key);
-    if (content !== undefined) {
+    if (content !== undefined && burnKeys.has(key)) {
+      const peek = url.searchParams.has('peek');
+      if (!peek) {
+        docs.delete(key);
+        burnKeys.delete(key);
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(peek ? { key, burnPending: true } : { content, key, burn: true }),
+      });
+    } else if (content !== undefined) {
       const frozen = frozenKeys.has(key) ? true : undefined;
       await route.fulfill({
         status: 200,

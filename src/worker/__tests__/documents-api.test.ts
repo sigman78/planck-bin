@@ -122,7 +122,7 @@ describe('POST /documents', () => {
     }).response;
     expect(res.status).toBe(201);
     const body = (await res.json()) as { key: string };
-    expect(Object.keys(body)).toEqual(['key']);
+    expect(Object.keys(body)).toEqual(['key', 'expiresAt']);
   });
 
   describe('storage budget (MAX_STORAGE_MB)', () => {

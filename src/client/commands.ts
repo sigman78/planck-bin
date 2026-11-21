@@ -5,12 +5,16 @@
  * availability rule. AppController maps ids to behaviour.
  */
 
+import type { BurnState } from './paste';
+
 export type ViewMode = 'editing' | 'presenting';
 
 export interface PaletteItem {
   id: string;
   label: string;
   hint?: string;
+  /** Monochrome state icon shown in place of the hint (see saveIcon). */
+  icon?: 'clock' | 'burn';
   keywords?: string[];
 }
 
@@ -30,6 +34,12 @@ export interface CommandContext {
   hasKey: boolean;
   enableTwitter: boolean;
   isMac: boolean;
+  /** Burn state of the paste on screen. */
+  burn?: BurnState;
+  /** The next save is burn-after-reading. */
+  burnNext?: boolean;
+  /** Lifetime the next save asks for, e.g. "1 week" or "default". */
+  lifetimeLabel?: string;
 }
 
 /**
@@ -45,20 +55,23 @@ interface ShortcutKey {
 
 interface CommandDef {
   id: string;
-  label: string;
+  /** Fixed, or computed so a toggle names the action it will perform. */
+  label: string | ((ctx: CommandContext) => string);
   keywords?: string[];
   /** Alt/Opt+Shift + this key runs the command. */
   key?: ShortcutKey;
   /** Explicit hint; `mod` is Cmd on Mac, Ctrl elsewhere. Defaults to the key. */
-  hint?: (mod: string) => string;
+  hint?: (mod: string, ctx: CommandContext) => string;
   submenu?: boolean;
   prefill?: string;
+  icon?: (ctx: CommandContext) => PaletteItem['icon'];
   available: (ctx: CommandContext) => boolean;
   /** Listed even when it cannot run, greyed out. */
   enabled?: (ctx: CommandContext) => boolean;
 }
 
 const presenting = (ctx: CommandContext) => ctx.mode === 'presenting';
+const editing = (ctx: CommandContext) => ctx.mode === 'editing';
 const always = () => true;
 
 const COMMANDS: CommandDef[] = [
@@ -69,6 +82,23 @@ const COMMANDS: CommandDef[] = [
     hint: (mod) => `${mod}+S`,
     available: always,
     enabled: (ctx) => ctx.mode === 'editing' && ctx.canSave,
+  },
+  // No direct keys: Alt+Shift+letter types symbols in the editor on some layouts.
+  {
+    id: 'expiry',
+    label: 'Expires',
+    keywords: ['lifetime', 'ttl', 'duration', 'permanent', 'expiry'],
+    hint: (_, ctx) => ctx.lifetimeLabel ?? 'default',
+    submenu: true,
+    available: editing,
+  },
+  {
+    id: 'burn',
+    // Burn and lifetime are independent server-side, so this is not an Expires preset.
+    label: (ctx) => (ctx.burnNext ? "Don't burn after reading" : 'Burn after reading'),
+    keywords: ['once', 'one-time', 'ephemeral', 'secret', 'self-destruct', 'destroy', 'keep'],
+    icon: (ctx) => (ctx.burnNext ? 'burn' : undefined),
+    available: editing,
   },
   {
     id: 'new',
@@ -82,21 +112,23 @@ const COMMANDS: CommandDef[] = [
     label: 'Duplicate & edit',
     keywords: ['fork', 'copy', 'edit'],
     key: { code: 'KeyD', label: 'D' },
-    available: (ctx) => presenting(ctx) && !ctx.frozen,
+    available: (ctx) => presenting(ctx) && !ctx.frozen && ctx.burn !== 'pending',
   },
   {
     id: 'copy-link',
     label: 'Copy link',
     keywords: ['share', 'url', 'clipboard'],
     key: { code: 'KeyC', label: 'C' },
-    available: presenting,
+    // A revealed burn paste is gone: its link leads nowhere.
+    available: (ctx) => presenting(ctx) && ctx.burn !== 'burned',
   },
   {
     id: 'raw',
     label: 'View raw',
     keywords: ['plain', 'text', 'download'],
     key: { code: 'KeyR', label: 'R' },
-    available: (ctx) => presenting(ctx) && !ctx.frozen && ctx.hasKey,
+    // /raw reads a burn paste: it would destroy the creator's link, or 404 once burned.
+    available: (ctx) => presenting(ctx) && !ctx.frozen && ctx.hasKey && !ctx.burn,
   },
   {
     id: 'find',
@@ -104,7 +136,7 @@ const COMMANDS: CommandDef[] = [
     keywords: ['search'],
     key: { code: 'KeyF', label: 'F' },
     prefill: '?',
-    available: presenting,
+    available: (ctx) => presenting(ctx) && ctx.burn !== 'pending',
   },
   {
     id: 'goto-line',
@@ -120,7 +152,7 @@ const COMMANDS: CommandDef[] = [
     keywords: ['syntax', 'highlight', 'mode'],
     key: { code: 'KeyL', label: 'L' },
     submenu: true,
-    available: presenting,
+    available: (ctx) => presenting(ctx) && ctx.burn !== 'pending',
   },
   {
     id: 'recent',
@@ -156,7 +188,7 @@ const COMMANDS: CommandDef[] = [
     label: 'Share on Twitter',
     keywords: ['tweet', 'post'],
     key: { code: 'KeyX', label: 'X' },
-    available: (ctx) => presenting(ctx) && ctx.enableTwitter,
+    available: (ctx) => presenting(ctx) && ctx.enableTwitter && !ctx.burn,
   },
   {
     id: 'about',
@@ -171,12 +203,13 @@ export function availableCommands(ctx: CommandContext): Command[] {
   const alt = ctx.isMac ? 'Opt' : 'Alt';
   return COMMANDS.filter((c) => c.available(ctx)).map((c) => ({
     id: c.id,
-    label: c.label,
+    label: typeof c.label === 'function' ? c.label(ctx) : c.label,
     keywords: c.keywords,
-    hint: c.hint?.(mod) ?? (c.key ? `${alt}+Shift+${c.key.label}` : undefined),
+    hint: c.hint?.(mod, ctx) ?? (c.key ? `${alt}+Shift+${c.key.label}` : undefined),
     disabled: c.enabled ? !c.enabled(ctx) : undefined,
     submenu: c.submenu,
     prefill: c.prefill,
+    icon: c.icon?.(ctx),
   }));
 }
 

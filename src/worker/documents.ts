@@ -8,7 +8,7 @@
 
 import type { Context } from 'hono';
 import type { GetResponse } from '../shared/types';
-import type { Env, StoredDocument } from './types';
+import { BURN_PENDING, type BurnPending, type Env, type StoredDocument } from './types';
 import { createStore } from './storage';
 import { getServerConfig } from './config';
 
@@ -29,6 +29,8 @@ export interface LoadedDocument {
   /** Unix seconds; null for built-in pages. */
   createdAt: number | null;
   expiresAt: number | null;
+  /** Burn after reading: this load deleted it, so it must not be cached or counted. */
+  burn: boolean;
   /** Strong validator: stored pastes never change; built-in pages change per deploy. */
   etag: string;
 }
@@ -44,13 +46,25 @@ export function isBuiltinPage(key: string): boolean {
 /**
  * Load a document by key, or null when it does not exist (including invalid
  * keys, which never reach D1). Storage errors propagate to the caller.
+ *
+ * A burn-after-reading document yields BURN_PENDING unless `consume` is set;
+ * then it is deleted and returned (or null when another read got it first).
  */
-export async function loadDocument(c: AppContext, key: string): Promise<LoadedDocument | null> {
+export async function loadDocument(
+  c: AppContext,
+  key: string,
+  { consume = false }: { consume?: boolean } = {}
+): Promise<LoadedDocument | BurnPending | null> {
   if (isBuiltinPage(key)) return loadBuiltinPage(c, key);
   if (!isValidKey(key)) return null;
 
-  const stored = await createStore(c.env).get(key);
-  return stored ? fromStored(key, stored) : null;
+  const store = createStore(c.env);
+  const stored = await store.get(key);
+  if (stored !== BURN_PENDING) return stored ? fromStored(key, stored, false) : null;
+  if (!consume) return BURN_PENDING;
+
+  const taken = await store.take(key);
+  return taken ? fromStored(key, taken, true) : null;
 }
 
 /**
@@ -63,7 +77,7 @@ export async function loadDocumentWithin(
   c: AppContext,
   key: string,
   maxChars: number
-): Promise<LoadedDocument | 'too-large' | null> {
+): Promise<LoadedDocument | BurnPending | 'too-large' | null> {
   if (isBuiltinPage(key)) {
     const page = await loadBuiltinPage(c, key);
     return page && page.content.length > maxChars ? 'too-large' : page;
@@ -71,17 +85,19 @@ export async function loadDocumentWithin(
   if (!isValidKey(key)) return null;
 
   const stored = await createStore(c.env).getWithin(key, maxChars);
-  return stored && stored !== 'too-large' ? fromStored(key, stored) : stored;
+  if (stored === null || stored === 'too-large' || stored === BURN_PENDING) return stored;
+  return fromStored(key, stored, false);
 }
 
-function fromStored(key: string, stored: StoredDocument): LoadedDocument {
+function fromStored(key: string, stored: StoredDocument, burn: boolean): LoadedDocument {
   return {
     key,
     content: stored.content,
     frozen: false,
     createdAt: stored.createdAt,
     expiresAt: stored.expiresAt,
-    etag: `"${key}-${stored.createdAt}"`,
+    burn,
+    etag: burn ? '' : `"${key}-${stored.createdAt}"`,
   };
 }
 
@@ -99,6 +115,7 @@ async function loadBuiltinPage(c: AppContext, key: string): Promise<LoadedDocume
     frozen: true,
     createdAt: null,
     expiresAt: null,
+    burn: false,
     etag: `"${key}-${fnv1a(content)}"`,
   };
 }
@@ -110,14 +127,15 @@ async function loadBuiltinPage(c: AppContext, key: string): Promise<LoadedDocume
  * and the free plan allows far fewer writes than reads.
  */
 export function countView(c: AppContext, doc: LoadedDocument): void {
-  if (doc.frozen || c.req.method !== 'GET' || !getServerConfig(c.env).countViews) return;
+  if (doc.frozen || doc.burn || c.req.method !== 'GET' || !getServerConfig(c.env).countViews)
+    return;
   const store = createStore(c.env);
   c.executionCtx.waitUntil(
     store.incrementViews(doc.key).catch((err) => console.error('View count update failed:', err))
   );
 }
 
-function isoOrNull(seconds: number | null): string | null {
+export function isoOrNull(seconds: number | null): string | null {
   return seconds === null ? null : new Date(seconds * 1000).toISOString();
 }
 
@@ -128,6 +146,7 @@ export function toGetResponse(doc: LoadedDocument): GetResponse {
     ...(doc.frozen ? { frozen: true } : {}),
     createdAt: isoOrNull(doc.createdAt),
     expiresAt: isoOrNull(doc.expiresAt),
+    ...(doc.burn ? { burn: true } : {}),
   };
 }
 
