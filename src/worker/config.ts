@@ -9,6 +9,8 @@ export interface ServerConfig {
   keyLength: number;
   keyStrategy: KeyStrategy;
   defaultExpireDays: number;
+  /** Upper bound for any paste lifetime, including "never"; 0 = no cap. */
+  maxExpireDays: number;
   browserCacheMaxAge: number;
   /** Render paste pages on the worker (content embedded in the HTML). */
   serverRender: boolean;
@@ -49,6 +51,8 @@ export const LIMITS = {
   keyLength: { min: 6, max: 48 },
   /** 0 = never expire. */
   defaultExpireDays: { min: 0, max: 36_500 },
+  /** 0 = no cap. */
+  maxExpireDays: { min: 0, max: 36_500 },
   browserCacheMaxAge: { min: 0, max: 31_536_000 },
   /** 0 = no limit; D1 databases top out at 10 GB. */
   maxStorageMb: { min: 0, max: 10_240 },
@@ -64,12 +68,19 @@ function intVar(
   return Math.min(max, Math.max(min, parsed));
 }
 
+/** Apply the MAX_EXPIRE_DAYS cap to a lifetime in days (0 = never). */
+export function capExpireDays(days: number, maxExpireDays: number): number {
+  if (maxExpireDays <= 0) return days;
+  return days === 0 ? maxExpireDays : Math.min(days, maxExpireDays);
+}
+
 export function getServerConfig(env: Env): ServerConfig {
   return {
     maxPasteSize: intVar(env.MAX_PASTE_SIZE, 400000, LIMITS.maxPasteSize),
     keyLength: intVar(env.KEY_LENGTH, 10, LIMITS.keyLength),
     keyStrategy: keyStrategyVar(env.KEY_STRATEGY),
     defaultExpireDays: intVar(env.DEFAULT_EXPIRE_DAYS, 30, LIMITS.defaultExpireDays),
+    maxExpireDays: intVar(env.MAX_EXPIRE_DAYS, 0, LIMITS.maxExpireDays),
     browserCacheMaxAge: intVar(env.BROWSER_CACHE_MAX_AGE, 0, LIMITS.browserCacheMaxAge),
     serverRender: boolVar(env.SERVER_RENDER, false),
     countViews: boolVar(env.COUNT_VIEWS, false),

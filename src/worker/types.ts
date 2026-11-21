@@ -5,16 +5,48 @@ export interface StoredDocument {
   expiresAt: number | null;
 }
 
+/** A burn-after-reading document found by get/getWithin; its content stays in D1. */
+export const BURN_PENDING = 'burn-pending';
+export type BurnPending = typeof BURN_PENDING;
+
+export interface CreateOptions {
+  /** Lifetime in days, 0 = never; omitted = the store default. */
+  expireDays?: number;
+  /** Delete the document on its first full read (take). */
+  burn?: boolean;
+}
+
+export interface CreatedDocument {
+  key: string;
+  /** Unix seconds; null when it never expires. */
+  expiresAt: number | null;
+}
+
 export interface DocumentStore {
-  /** Fetch a document, or null if missing/expired. */
-  get(key: string): Promise<StoredDocument | null>;
+  /**
+   * Fetch a document, or null if missing/expired. A burn-after-reading
+   * document is not read: it yields BURN_PENDING (use take to read it).
+   */
+  get(key: string): Promise<StoredDocument | BurnPending | null>;
   /**
    * Like get, but leaves content longer than `maxChars` characters in the
    * database and returns 'too-large' instead.
    */
-  getWithin(key: string, maxChars: number): Promise<StoredDocument | 'too-large' | null>;
-  /** Atomically insert content under a fresh unique key and return that key. */
-  create(content: string, keyOptions: KeyOptions, expireDays?: number): Promise<string>;
+  getWithin(
+    key: string,
+    maxChars: number
+  ): Promise<StoredDocument | BurnPending | 'too-large' | null>;
+  /**
+   * Atomically delete a burn-after-reading document and return it; null when
+   * it is missing, expired, not a burn document, or another read won the race.
+   */
+  take(key: string): Promise<StoredDocument | null>;
+  /** Atomically insert content under a fresh unique key. */
+  create(
+    content: string,
+    keyOptions: KeyOptions,
+    options?: CreateOptions
+  ): Promise<CreatedDocument>;
   /** Bump the view counter (best-effort, safe to run in the background). */
   incrementViews(key: string): Promise<void>;
   /** Delete expired documents, returning how many were removed. */
@@ -41,6 +73,7 @@ export interface Env {
   SERVER_RENDER?: string;
   COUNT_VIEWS?: string;
   MAX_STORAGE_MB?: string;
+  MAX_EXPIRE_DAYS?: string;
   CREATE_RATE_LIMITER: RateLimit;
   READ_RATE_LIMITER: RateLimit;
 }
