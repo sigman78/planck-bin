@@ -3,7 +3,7 @@
  *
  * The viewer holds the paste as one text node; matches are painted over it
  * with the CSS Custom Highlight API, above the syntax highlights. Without the
- * API, find still counts matches and scrolls to them, unpainted.
+ * API, the current match is shown with the regular text selection instead.
  */
 
 import { supportsHighlights } from './syntax-highlights';
@@ -37,6 +37,7 @@ const highlightRegistry = () => CSS.highlights as unknown as Map<string, Highlig
 export class ViewerFind {
   private ranges: Range[] = [];
   private index = -1;
+  private usedSelection = false;
 
   /**
    * @param root element whose text is searched (the viewer's code element)
@@ -78,6 +79,10 @@ export class ViewerFind {
       highlightRegistry().delete(HL_ALL);
       highlightRegistry().delete(HL_CURRENT);
     }
+    if (this.usedSelection) {
+      window.getSelection()?.removeAllRanges();
+      this.usedSelection = false;
+    }
     this.ranges = [];
     this.index = -1;
   }
@@ -98,6 +103,11 @@ export class ViewerFind {
       now.priority = 2;
       highlightRegistry().set(HL_ALL, all);
       highlightRegistry().set(HL_CURRENT, now);
+    } else {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(current);
+      this.usedSelection = true;
     }
     this.reveal(current);
   }

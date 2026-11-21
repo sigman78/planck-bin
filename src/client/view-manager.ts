@@ -170,7 +170,7 @@ export class ViewManager {
       this.editor.style.display = 'none';
       this.viewer.style.display = 'block';
       this.renderViewerContent(state.content, highlighted);
-      const lineCount = (state.content.match(/\n/g) ?? []).length + 1;
+      const lineCount = (viewerText(state.content).match(/\n/g) ?? []).length + 1;
       this.updateGutter(lineCount, true);
       // this.resetLineHighlight();
       this.highlightAnchorLine();
@@ -181,7 +181,8 @@ export class ViewManager {
       this.editor.value = state.content;
       this.editor.focus();
       this.editor.scrollTop = 0; // force reflow so field-sizing:content takes effect immediately
-      const lineCount = state.content === '' ? 1 : (state.content.match(/\n/g) ?? []).length + 1;
+      const lineCount =
+        state.content === '' ? 1 : (viewerText(state.content).match(/\n/g) ?? []).length + 1;
       this.updateGutter(lineCount, false);
       this.updateLineHighlight();
     }
