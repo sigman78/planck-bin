@@ -13,6 +13,8 @@ export interface PaletteItem {
   id: string;
   label: string;
   hint?: string;
+  /** Monochrome state icon shown in place of the hint (see saveIcon). */
+  icon?: 'clock' | 'burn';
   keywords?: string[];
 }
 
@@ -23,8 +25,6 @@ export interface Command extends PaletteItem {
   submenu?: boolean;
   /** Replaces the input with this prefix instead of running (e.g. ":"). */
   prefill?: string;
-  /** Runs without closing the palette (toggles whose hint shows the new state). */
-  keepOpen?: boolean;
 }
 
 export interface CommandContext {
@@ -55,7 +55,8 @@ interface ShortcutKey {
 
 interface CommandDef {
   id: string;
-  label: string;
+  /** Fixed, or computed so a toggle names the action it will perform. */
+  label: string | ((ctx: CommandContext) => string);
   keywords?: string[];
   /** Alt/Opt+Shift + this key runs the command. */
   key?: ShortcutKey;
@@ -63,7 +64,7 @@ interface CommandDef {
   hint?: (mod: string, ctx: CommandContext) => string;
   submenu?: boolean;
   prefill?: string;
-  keepOpen?: boolean;
+  icon?: (ctx: CommandContext) => PaletteItem['icon'];
   available: (ctx: CommandContext) => boolean;
   /** Listed even when it cannot run, greyed out. */
   enabled?: (ctx: CommandContext) => boolean;
@@ -93,10 +94,10 @@ const COMMANDS: CommandDef[] = [
   },
   {
     id: 'burn',
-    label: 'Burn after reading',
-    keywords: ['once', 'secret', 'self-destruct', 'destroy'],
-    hint: (_, ctx) => (ctx.burnNext ? 'on' : 'off'),
-    keepOpen: true,
+    // Burn and lifetime are independent server-side, so this is not an Expires preset.
+    label: (ctx) => (ctx.burnNext ? "Don't burn after reading" : 'Burn after reading'),
+    keywords: ['once', 'one-time', 'ephemeral', 'secret', 'self-destruct', 'destroy', 'keep'],
+    icon: (ctx) => (ctx.burnNext ? 'burn' : undefined),
     available: editing,
   },
   {
@@ -202,13 +203,13 @@ export function availableCommands(ctx: CommandContext): Command[] {
   const alt = ctx.isMac ? 'Opt' : 'Alt';
   return COMMANDS.filter((c) => c.available(ctx)).map((c) => ({
     id: c.id,
-    label: c.label,
+    label: typeof c.label === 'function' ? c.label(ctx) : c.label,
     keywords: c.keywords,
     hint: c.hint?.(mod, ctx) ?? (c.key ? `${alt}+Shift+${c.key.label}` : undefined),
     disabled: c.enabled ? !c.enabled(ctx) : undefined,
     submenu: c.submenu,
     prefill: c.prefill,
-    keepOpen: c.keepOpen,
+    icon: c.icon?.(ctx),
   }));
 }
 

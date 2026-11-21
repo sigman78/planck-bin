@@ -19,15 +19,16 @@ describe('availableCommands', () => {
     expect(ids({})).not.toContain('burn');
   });
 
-  it('shows the chosen save options as hints', () => {
-    const hint = (id: string, ctx: Partial<CommandContext>) =>
-      availableCommands({ ...base, mode: 'editing', ...ctx }).find((c) => c.id === id)!.hint;
-    expect(hint('expiry', {})).toBe('default');
-    expect(hint('expiry', { lifetimeLabel: '1 week' })).toBe('1 week');
-    expect(hint('burn', {})).toBe('off');
-    expect(hint('burn', { burnNext: true })).toBe('on');
-    const burn = availableCommands({ ...base, mode: 'editing' }).find((c) => c.id === 'burn')!;
-    expect(burn.keepOpen).toBe(true);
+  it('shows the chosen save options', () => {
+    const find = (id: string, ctx: Partial<CommandContext>) =>
+      availableCommands({ ...base, mode: 'editing', ...ctx }).find((c) => c.id === id)!;
+    expect(find('expiry', {}).hint).toBe('default');
+    expect(find('expiry', { lifetimeLabel: '1 week' }).hint).toBe('1 week');
+    // The burn label names the action it will perform; on, it carries the flame.
+    const off = find('burn', {});
+    expect(off).toMatchObject({ label: 'Burn after reading', hint: undefined, icon: undefined });
+    const on = find('burn', { burnNext: true });
+    expect(on).toMatchObject({ label: "Don't burn after reading", hint: undefined, icon: 'burn' });
   });
 
   it('never offers a read that would destroy a burn paste', () => {

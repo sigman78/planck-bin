@@ -39,17 +39,20 @@ test.describe('Paste lifetime', () => {
 
     await pickLifetime(page, '1 week');
     await page.locator(S.editor).fill('hello');
-    await expect(page.locator(S.saveBtn)).toHaveText('Save (1w)');
+    await expect(page.locator(S.saveBtn)).toHaveText('Save');
+    await expect(page.locator(`${S.saveBtn} [data-icon="clock"]`)).toBeVisible();
+    await expect(page.locator(S.saveBtn)).toHaveAccessibleName('Save, expires in 1 week');
     await page.locator(S.saveBtn).click();
     await expect(page.locator(S.viewer)).toBeVisible();
     expect(store.lastSaveParams()?.get('expires')).toBe('1w');
 
     await page.goto('/');
     await page.locator(S.editor).fill('again');
-    await expect(page.locator(S.saveBtn)).toHaveText('Save (1w)');
+    await expect(page.locator(S.saveBtn)).toHaveAccessibleName('Save, expires in 1 week');
 
     await pickLifetime(page, 'Server default');
     await expect(page.locator(S.saveBtn)).toHaveText('Save');
+    await expect(page.locator(`${S.saveBtn} svg`)).toHaveCount(0);
     await page.locator(S.saveBtn).click();
     await expect(page.locator(S.viewer)).toBeVisible();
     expect(store.lastSaveParams()?.has('expires')).toBe(false);
@@ -75,10 +78,19 @@ test.describe('Burn after reading', () => {
     await openPalette(page);
     await page.locator(S.paletteInput).fill('Burn after reading');
     await page.keyboard.press('Enter');
-    // Stays open with the new state in the hint.
-    await expect(page.locator(S.paletteSelected)).toContainText('on');
+    // Runs and closes like any command; a toast confirms the new state.
+    await expect(page.locator(S.island)).not.toHaveClass(/\bopen\b/);
+    await expect(page.locator(S.toast)).toHaveText('Next save burns after reading');
+    await expect(page.locator(S.editor)).toBeFocused();
+    // Reopened, the item offers the opposite action and carries the flame.
+    await openPalette(page);
+    await page.locator(S.paletteInput).fill('burn after reading');
+    await expect(page.locator(S.paletteSelected)).toContainText("Don't burn after reading");
+    await expect(page.locator(`${S.paletteSelected} [data-icon="burn"]`)).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.locator(S.saveBtn)).toHaveText('Save (burn)');
+    await expect(page.locator(S.saveBtn)).toHaveText('Save');
+    await expect(page.locator(`${S.saveBtn} [data-icon="burn"]`)).toBeVisible();
+    await expect(page.locator(S.saveBtn)).toHaveAccessibleName('Save, burn after reading');
 
     await page.locator(S.saveBtn).click();
     await expect(page.locator(S.viewer)).toContainText('top secret');

@@ -33,6 +33,7 @@ export interface PaletteHost {
 interface Row {
   label: string;
   hint?: string;
+  icon?: SaveIcon;
   disabled?: boolean;
   /** Runs on Enter/click. Return true to keep the palette open. */
   action?: (evt: { shiftKey: boolean }) => boolean | void;
@@ -318,13 +319,6 @@ export class CommandPalette {
     }, COLLAPSE_FALLBACK_MS);
   }
 
-  /**
-   * The size the folded pill is about to settle at. Its slide-out parts only
-   * start transitioning once `.open` is gone (e.g. the keycap re-expanding
-   * under a pointer that is still over the island), so a plain read returns
-   * their collapsed start values: the pill would shrink to the bare mark and
-   * then grow again. Reading with those transitions off gives the end state.
-   */
   /** Whether the last pointer position lies inside the pill once folded to `size`. */
   private pointerInFolded(size: { width: number; height: number }): boolean {
     if (!this.pointer) return false;
@@ -338,6 +332,13 @@ export class CommandPalette {
     );
   }
 
+  /**
+   * The size the folded pill is about to settle at. Its slide-out parts only
+   * start transitioning once `.open` is gone (e.g. the keycap re-expanding
+   * under a pointer that is still over the island), so a plain read returns
+   * their collapsed start values: the pill would shrink to the bare mark and
+   * then grow again. Reading with those transitions off gives the end state.
+   */
   private foldedSize(): { width: number; height: number } {
     this.hint.classList.add('is-measuring');
     const size = { width: this.hint.offsetWidth, height: this.hint.offsetHeight };
@@ -349,9 +350,24 @@ export class CommandPalette {
     this.root.dataset.mode = mode;
   }
 
-  /** Save chip text, e.g. "Save (1w, burn)" for non-default save options. */
-  setSaveLabel(text: string): void {
-    if (this.saveBtn.textContent !== text) this.saveBtn.textContent = text;
+  /**
+   * Save chip label: "Save" plus an optional monochrome icon for the
+   * non-default save option (clock for a lifetime, flame for burn).
+   * `spoken` carries the details, as accessible name and hover tooltip.
+   */
+  setSaveLabel(spoken: string, icon: SaveIcon | null): void {
+    const current = this.saveBtn.querySelector<SVGSVGElement>('.island-save-icon');
+    if ((current?.dataset.icon ?? null) !== icon) {
+      this.saveBtn.textContent = 'Save';
+      if (icon) this.saveBtn.appendChild(saveIcon(icon));
+    }
+    if (spoken === 'Save') {
+      this.saveBtn.removeAttribute('aria-label');
+      this.saveBtn.removeAttribute('title');
+    } else {
+      this.saveBtn.setAttribute('aria-label', spoken);
+      this.saveBtn.title = spoken;
+    }
   }
 
   setSaveEnabled(enabled: boolean): void {
@@ -516,6 +532,7 @@ export class CommandPalette {
     const rows: Row[] = commands.map((cmd) => ({
       label: cmd.label,
       hint: cmd.hint,
+      icon: cmd.icon,
       disabled: cmd.disabled,
       action: () => {
         if (cmd.submenu) {
@@ -524,10 +541,6 @@ export class CommandPalette {
         }
         if (cmd.prefill !== undefined) {
           this.setInput(cmd.prefill);
-          return true;
-        }
-        if (cmd.keepOpen) {
-          this.host.run(cmd.id);
           return true;
         }
         this.close();
@@ -577,7 +590,9 @@ export class CommandPalette {
       const label = document.createElement('span');
       label.textContent = row.label;
       el.appendChild(label);
-      if (row.hint) {
+      if (row.icon) {
+        el.appendChild(saveIcon(row.icon));
+      } else if (row.hint) {
         const kbd = document.createElement('kbd');
         kbd.textContent = row.hint;
         el.appendChild(kbd);
@@ -657,6 +672,40 @@ export class CommandPalette {
     const el = (target as Element | null)?.closest?.('.island-row') as HTMLElement | null;
     return el ? parseInt(el.dataset.index ?? '-1', 10) : -1;
   }
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+export type SaveIcon = NonNullable<PaletteItem['icon']>;
+
+/** Outline paths in a 10x12 box, stroked in currentColor. */
+const SAVE_ICON_PATHS: Record<SaveIcon, string[]> = {
+  clock: ['M5 2.4 A4.1 4.1 0 1 0 5 10.6 A4.1 4.1 0 1 0 5 2.4 Z', 'M5 4.3 V6.6 L6.6 7.6'],
+  burn: [
+    'M5 0.9 C5.4 3 8.6 4.6 8.6 7.6 A3.6 3.6 0 0 1 1.4 7.6 C1.4 6 2.2 4.9 3.1 4.2 ' +
+      'C3.2 5.5 3.8 6.3 4.5 6.4 C4.4 4.6 4.2 2.6 5 0.9 Z',
+  ],
+};
+
+function saveIcon(kind: SaveIcon): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'island-save-icon');
+  svg.dataset.icon = kind;
+  svg.setAttribute('width', '10');
+  svg.setAttribute('height', '12');
+  svg.setAttribute('viewBox', '0 0 10 12');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.4');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of SAVE_ICON_PATHS[kind]) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
 }
 
 function itemTexts(item: PaletteItem): string[] {

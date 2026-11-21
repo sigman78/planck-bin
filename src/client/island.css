@@ -172,12 +172,17 @@
     white-space: nowrap;
 }
 
-/* Room for the lifetime and burn suffix, e.g. "Save (1mo, burn)". */
+/* Room for the save option icon (lifetime clock or burn flame). */
 .island-hint .island-save:not(:disabled) {
     max-width: 140px;
     opacity: 1;
     margin-right: 6px;
     padding: 0 9px;
+}
+
+.island-save-icon {
+    margin-left: 4px;
+    vertical-align: -1px;
 }
 
 .island-hint .island-save:disabled {
@@ -465,6 +470,13 @@
     font-family: var(--font-editor);
     font-size: 11px;
     color: var(--color-placeholder);
+}
+
+/* State icon in place of a hint, e.g. the flame on "Don't burn after reading". */
+.island-row .island-save-icon {
+    flex: none;
+    align-self: center;
+    margin: 0;
 }
 
 .island-empty {

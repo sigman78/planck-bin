@@ -441,11 +441,15 @@ export class AppController {
   private syncChrome(): void {
     this.palette.setMode(this.viewMode);
     this.palette.setSaveEnabled(this.canSave());
-    const options = [...(this.lifetime ? [this.lifetime] : []), ...(this.burnNext ? ['burn'] : [])];
-    this.palette.setSaveLabel(options.length > 0 ? `Save (${options.join(', ')})` : 'Save');
+    // One icon on the chip: burn overrides the lifetime clock; details are spoken.
+    let spoken = 'Save';
+    if (this.lifetime === 'never') spoken += ', permanent';
+    else if (this.lifetime) spoken += `, expires in ${LIFETIME_LABELS[this.lifetime]}`;
+    if (this.burnNext) spoken += ', burn after reading';
+    const icon = this.burnNext ? 'burn' : this.lifetime ? 'clock' : null;
+    this.palette.setSaveLabel(spoken, icon);
   }
 
-  /** Dispatch a command palette command id. */
   /** Zoom the editor and flash the new font size. */
   private zoom(direction: 1 | -1 | 'reset'): void {
     const { level, atLimit } = this.view.zoom(direction);
@@ -453,6 +457,7 @@ export class AppController {
     this.notify.toast(`Font size ${percent}${atLimit ? ' (limit)' : ''}`, 'info', { brief: true });
   }
 
+  /** Dispatch a command palette command id. */
   private runCommand(id: string): void {
     switch (id) {
       case 'save':
@@ -477,7 +482,14 @@ export class AppController {
         return this.openPath('/about.md');
       case 'burn':
         this.burnNext = !this.burnNext;
-        return this.syncChrome();
+        this.syncChrome();
+        // The Save chip (and its flame) is hidden while the editor is empty.
+        this.notify.toast(
+          this.burnNext ? 'Next save burns after reading' : 'Burn after reading off',
+          'info',
+          { brief: true }
+        );
+        return;
     }
   }
 

@@ -132,8 +132,10 @@ palette. Type to filter commands, then press Enter.
 
 It also switches the highlighting language and lists recent pastes kept in this browser. While
 editing, **Expires** picks the lifetime of new pastes (remembered in this browser) and **Burn
-after reading** makes the next save a one-time paste. Non-default choices show on the Save chip,
-e.g. `Save (1w, burn)`. Burn pastes are not added to the recent list.
+after reading** makes the next save a one-time paste (picked again, it reads **Don't burn after
+reading** and turns it off). Non-default choices show as an icon on
+the Save chip: a clock for a lifetime, a flame for burn (the flame wins when both are set); the
+details are in its tooltip. Burn pastes are not added to the recent list.
 
 ## Shortcuts
 
