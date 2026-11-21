@@ -1,4 +1,5 @@
-import { StorageService } from './storage';
+import { StorageService, type SaveOptions } from './storage';
+import type { BurnState } from './paste';
 import { highlightContent, getExtensionForLanguage, resolveLanguage } from './highlight-config';
 import { buildPath, type ParsedPath } from './path-utils';
 
@@ -8,6 +9,7 @@ export interface DocumentRenderResult {
     key: string;
     language?: string;
     frozen?: boolean;
+    burn?: BurnState;
   };
   highlighted?: string;
   canonicalPath: string;
@@ -16,8 +18,8 @@ export interface DocumentRenderResult {
 export class DocumentSession {
   constructor(private readonly storage: StorageService = new StorageService()) {}
 
-  async save(content: string): Promise<DocumentRenderResult> {
-    const result = await this.storage.save(content);
+  async save(content: string, options?: SaveOptions): Promise<DocumentRenderResult> {
+    const result = await this.storage.save(content, options);
     const highlightResult = highlightContent(content);
     const language = highlightResult.language;
     const ext = language ? getExtensionForLanguage(language) : undefined;
@@ -27,15 +29,17 @@ export class DocumentSession {
         content,
         key: result.key,
         language,
+        burn: result.burn,
       },
       highlighted: highlightResult.highlighted,
       canonicalPath: buildPath(result.key, ext),
     };
   }
 
-  async load(path: ParsedPath): Promise<DocumentRenderResult> {
+  /** @throws BurnPendingError for an unread burn paste, unless `reveal` is set */
+  async load(path: ParsedPath, reveal = false): Promise<DocumentRenderResult> {
     const urlLanguage = path.ext ? resolveLanguage(path.ext) : undefined;
-    const result = await this.storage.load(path.key);
+    const result = await this.storage.load(path.key, reveal);
     // The URL extension is the only language source; without one, auto-detect.
     const highlightResult = highlightContent(result.content, urlLanguage);
     const plain = urlLanguage === '';
@@ -47,6 +51,7 @@ export class DocumentSession {
         key: result.key,
         language,
         frozen: result.frozen,
+        burn: result.burn,
       },
       highlighted: highlightResult.highlighted,
       canonicalPath: plain

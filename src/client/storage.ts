@@ -8,17 +8,38 @@
  * - Throws errors on failure
  */
 
-import type { GetResponse, SaveResponse } from '../shared/types';
+import type { BurnPending, GetResponse, LifetimeId, SaveResponse } from '../shared/types';
 import { takeEmbeddedDocument } from './embedded-document';
+import type { BurnState } from './paste';
 
 export interface LoadResult {
   content: string;
   key: string;
   frozen?: boolean;
+  /** Burn after reading: 'armed' for the creator's copy, 'burned' once read. */
+  burn?: BurnState;
+}
+
+export interface SaveOptions {
+  /** Omitted = the server default. */
+  expires?: LifetimeId;
+  burn?: boolean;
 }
 
 export interface SaveResult {
   key: string;
+  burn?: BurnState;
+}
+
+/**
+ * Thrown by load() for an unread burn-after-reading paste: reading it would
+ * destroy it, so the caller asks first and then loads with `reveal`.
+ */
+export class BurnPendingError extends Error {
+  constructor(readonly key: string) {
+    super('Burn after reading');
+    this.name = 'BurnPendingError';
+  }
 }
 
 /** Recently loaded or saved pastes kept in memory (pastes never change). */
@@ -43,9 +64,10 @@ export class StorageService {
   /**
    * Load document from server
    * @throws Error if fetch fails or document not found
+   * @throws BurnPendingError for an unread burn paste, unless `reveal` is set
    * @returns LoadedDocumentState with guaranteed key
    */
-  async load(key: string): Promise<LoadResult> {
+  async load(key: string, reveal = false): Promise<LoadResult> {
     const cached = this.recent.get(key);
     if (cached) {
       this.remember(cached); // refresh its position
@@ -55,18 +77,27 @@ export class StorageService {
     // A server-rendered page already carries its document, or says it is gone.
     const embedded = takeEmbeddedDocument(key);
     if (embedded === 'not-found') throw new Error('Document not found');
-    const data = embedded ?? (await this.fetchDocument(key));
+    if (embedded === 'burn-pending' && !reveal) throw new BurnPendingError(key);
+    const data =
+      embedded && embedded !== 'burn-pending' ? embedded : await this.fetchDocument(key, reveal);
+    if ('burnPending' in data) throw new BurnPendingError(key);
     const doc: LoadResult = {
       content: data.content,
       key: data.key,
       frozen: data.frozen,
+      burn: data.burn ? 'burned' : undefined,
     };
+    // A revealed burn paste exists only in this tab now: back/forward finds it here.
     this.remember(doc);
     return doc;
   }
 
-  private async fetchDocument(key: string): Promise<GetResponse> {
-    const response = await fetch(`/documents/${key}`);
+  /**
+   * Without `reveal`, ?peek=1 makes the server answer a burn paste with a
+   * marker instead of reading (and destroying) it.
+   */
+  private async fetchDocument(key: string, reveal: boolean): Promise<GetResponse | BurnPending> {
+    const response = await fetch(reveal ? `/documents/${key}` : `/documents/${key}?peek=1`);
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -83,8 +114,12 @@ export class StorageService {
    * @throws Error if save fails
    * @returns SaveResult with guaranteed key
    */
-  async save(content: string): Promise<SaveResult> {
-    const response = await fetch('/documents', {
+  async save(content: string, options: SaveOptions = {}): Promise<SaveResult> {
+    const query = new URLSearchParams();
+    if (options.expires) query.set('expires', options.expires);
+    if (options.burn) query.set('burn', '1');
+    const search = query.toString();
+    const response = await fetch(search ? `/documents?${search}` : '/documents', {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain',
@@ -98,9 +133,9 @@ export class StorageService {
 
     const data: SaveResponse = await response.json();
 
-    this.remember({ key: data.key, content });
-    return {
-      key: data.key,
-    };
+    // The creator sees a burn paste from memory: no read, so it stays armed.
+    const burn = data.burn ? 'armed' : undefined;
+    this.remember({ key: data.key, content, burn });
+    return { key: data.key, burn };
   }
 }

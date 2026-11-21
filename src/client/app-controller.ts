@@ -16,6 +16,9 @@ import appConfig from './config';
 import { buildPath, parsePath, type ParsedPath } from './path-utils';
 import { getExtensionForLanguage, highlightContent, listLanguages } from './highlight-config';
 import { hasEmbeddedDocument } from './embedded-document';
+import { BurnPendingError } from './storage';
+import { LifetimeStore } from './lifetime-store';
+import { LIFETIMES, LIFETIME_LABELS, isLifetimeId, type LifetimeId } from '../shared/types';
 import type { PaletteItem } from './commands';
 import { DocumentSession } from './document-session';
 import { NavigationState, type HistoryState } from './navigation-state';
@@ -31,6 +34,8 @@ const FIRST_HINT_MS = 8000;
 
 /** Palette item id for the "Clear recent pastes" row (never a paste key). */
 const CLEAR_RECENT_ID = '/clear';
+/** Expires submenu item for the server default lifetime (never a preset id). */
+const DEFAULT_LIFETIME_ID = 'default';
 type ActivityState = 'idle' | 'loading' | 'saving';
 
 export interface AppConfig {
@@ -56,6 +61,13 @@ export class AppController {
   private hintStage: HintStage = 'learn';
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly enableTwitter: boolean;
+  private lifetimes = new LifetimeStore();
+  /** Lifetime for new pastes; null = server default. Remembered per browser. */
+  private lifetime: LifetimeId | null = this.lifetimes.load();
+  /** The next save is burn-after-reading; resets after each save. */
+  private burnNext = false;
+  /** The unread burn paste behind the reveal gate. */
+  private pendingBurn: ParsedPath | null = null;
 
   // State machine
   private viewMode: ViewMode = 'editing';
@@ -94,6 +106,9 @@ export class AppController {
         hasKey: this.document.key !== undefined,
         enableTwitter: this.enableTwitter,
         isMac,
+        burn: this.document.burn,
+        burnNext: this.burnNext,
+        lifetimeLabel: this.lifetime ? LIFETIME_LABELS[this.lifetime] : 'default',
       }),
       run: (id) => this.runCommand(id),
       submenu: (id) => this.submenuItems(id),
@@ -133,7 +148,9 @@ export class AppController {
     this.palette.init();
     this.initHints();
     window.addEventListener('beforeunload', (e) => {
-      if (this.viewMode === 'editing' && this.document.content.trim()) {
+      // Unsaved text, or a revealed burn paste (no copy is left anywhere else).
+      const unsaved = this.viewMode === 'editing' && this.document.content.trim() !== '';
+      if (unsaved || this.document.burn === 'burned') {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -199,10 +216,17 @@ export class AppController {
       this.activity = 'saving';
       this.notify.progressStart();
 
-      const result = await this.session.save(this.document.content);
+      const result = await this.session.save(this.document.content, {
+        expires: this.lifetime ?? undefined,
+        burn: this.burnNext,
+      });
       this.document.apply(result.paste);
       this.draft.clear();
-      this.recent.record(result.paste.key, result.canonicalPath, content);
+      const burn = result.paste.burn !== undefined;
+      this.burnNext = false;
+      // A burn paste is one-shot: no preview of it is kept in localStorage.
+      if (!burn) this.recent.record(result.paste.key, result.canonicalPath, content);
+      if (burn) this.notify.toast('Burn link ready: it can be opened once');
 
       this.activity = 'idle';
       setTimeout(() => {
@@ -241,6 +265,7 @@ export class AppController {
     // Guard: can't load while loading/saving
     if (this.isBusy) return;
 
+    this.pendingBurn = null;
     // A server-rendered page already shows the text: don't blank it while "loading".
     const hideWhileLoading = this.isFirstLoad && !hasEmbeddedDocument(path.key);
     this.isFirstLoad = false;
@@ -254,7 +279,7 @@ export class AppController {
     try {
       const result = await this.session.load(path);
       this.document.apply(result.paste);
-      if (!result.paste.frozen) {
+      if (!result.paste.frozen && !result.paste.burn) {
         this.recent.record(result.paste.key, result.canonicalPath, result.paste.content);
       }
 
@@ -278,17 +303,80 @@ export class AppController {
         animate,
       });
     } catch (err) {
-      console.error('Load failed:', err);
-      if (err instanceof Error && err.message === 'Document not found') {
-        this.recent.remove(path.key);
-      }
-
-      // Fallback: show new document
       this.activity = 'idle';
-      this.document.reset();
-      this.navigation.replacePath('/');
-      this.notify.toast('Document not found.', 'error');
-      this.transitionToView('editing');
+      if (err instanceof BurnPendingError) {
+        this.showBurnGate(path);
+        return;
+      }
+      this.showLoadFailure(path, err);
+    }
+  }
+
+  /** Fallback after a failed load: a new document, and the paste is forgotten. */
+  private showLoadFailure(path: ParsedPath, err: unknown): void {
+    console.error('Load failed:', err);
+    if (err instanceof Error && err.message === 'Document not found') {
+      this.recent.remove(path.key);
+    }
+
+    this.document.reset();
+    this.navigation.replacePath('/');
+    this.notify.toast('Document not found.', 'error');
+    this.transitionToView('editing');
+  }
+
+  /** An unread burn paste: ask before reading it, since reading destroys it. */
+  private showBurnGate(path: ParsedPath): void {
+    this.pendingBurn = path;
+    this.document.reset();
+    this.document.key = path.key;
+    this.document.burn = 'pending';
+    this.viewMode = 'presenting';
+    this.palette.close(false);
+    this.hasRendered = true;
+    this.view.renderBurnGate();
+    this.syncChrome();
+    this.palette.showPrompt({
+      confirm: () => void this.revealBurn(),
+      cancel: () => this.newDocument(true),
+    });
+  }
+
+  /** Read (and so destroy) the burn paste behind the gate. */
+  private async revealBurn(): Promise<void> {
+    const path = this.pendingBurn;
+    if (this.isBusy || !path) return;
+
+    this.activity = 'loading';
+    this.palette.setPromptBusy(true);
+    this.notify.progressStart();
+    try {
+      const result = await this.session.load(path, true);
+      this.pendingBurn = null;
+      this.document.apply(result.paste);
+      this.recent.remove(path.key);
+      this.activity = 'idle';
+      this.notify.progressDone();
+      this.palette.hidePrompt();
+      if (!path.ext && result.canonicalPath !== window.location.pathname) {
+        this.navigation.replacePath(result.canonicalPath);
+      }
+      this.transitionToView('presenting', { highlighted: result.highlighted, scrollY: 0 });
+      this.notify.toast('Destroyed on the server: this tab holds the only copy');
+    } catch (err) {
+      this.activity = 'idle';
+      this.notify.progressDone();
+      // Only a 404 means it is gone. Anything else (offline, 5xx) never reached
+      // the delete or lost its answer before we saw content: keep asking.
+      if (err instanceof Error && err.message === 'Document not found') {
+        this.pendingBurn = null;
+        this.palette.hidePrompt();
+        this.showLoadFailure(path, err);
+        return;
+      }
+      console.error('Reveal failed:', err);
+      this.palette.setPromptBusy(false);
+      this.notify.toast('Could not reach the server. Try again.', 'error');
     }
   }
 
@@ -297,6 +385,8 @@ export class AppController {
     options: { highlighted?: string; scrollY?: number | null; animate?: boolean } = {}
   ): void {
     this.viewMode = mode;
+    this.pendingBurn = null;
+    this.palette.hidePrompt();
     // Close first: renderFullState may move focus into the editor.
     this.palette.close(false);
     const render = () => {
@@ -342,10 +432,12 @@ export class AppController {
     return this.viewMode === 'editing' && this.document.content.trim() !== '';
   }
 
-  /** Reflect mode and save availability in the island. */
+  /** Reflect mode, save availability and save options in the island. */
   private syncChrome(): void {
     this.palette.setMode(this.viewMode);
     this.palette.setSaveEnabled(this.canSave());
+    const options = [...(this.lifetime ? [this.lifetime] : []), ...(this.burnNext ? ['burn'] : [])];
+    this.palette.setSaveLabel(options.length > 0 ? `Save (${options.join(', ')})` : 'Save');
   }
 
   /** Dispatch a command palette command id. */
@@ -378,6 +470,9 @@ export class AppController {
         return this.zoom('reset');
       case 'about':
         return this.openPath('/about.md');
+      case 'burn':
+        this.burnNext = !this.burnNext;
+        return this.syncChrome();
     }
   }
 
@@ -389,6 +484,15 @@ export class AppController {
         label: lang.name,
         hint: lang.id === current ? 'current' : `.${lang.ext}`,
         keywords: [lang.ext, lang.id],
+      }));
+    }
+    if (menuId === 'expiry') {
+      const current = this.lifetime ?? DEFAULT_LIFETIME_ID;
+      const ids = [DEFAULT_LIFETIME_ID, ...Object.keys(LIFETIMES)];
+      return ids.map((id) => ({
+        id,
+        label: isLifetimeId(id) ? LIFETIME_LABELS[id] : 'Server default',
+        hint: id === current ? 'current' : undefined,
       }));
     }
     if (menuId === 'recent') {
@@ -410,6 +514,12 @@ export class AppController {
   private runSubmenuItem(menuId: string, itemId: string): void {
     if (menuId === 'language') {
       this.setLanguage(itemId);
+    } else if (menuId === 'expiry') {
+      this.lifetime = isLifetimeId(itemId) ? itemId : null;
+      this.lifetimes.save(this.lifetime);
+      const label = this.lifetime ? LIFETIME_LABELS[this.lifetime] : 'server default';
+      this.notify.toast(`New pastes expire: ${label}`, 'info', { brief: true });
+      this.syncChrome();
     } else if (menuId === 'recent') {
       if (itemId === CLEAR_RECENT_ID) {
         this.recent.clear();
@@ -427,13 +537,16 @@ export class AppController {
   /** Re-highlight the presented paste with another language ('' = plain). */
   private setLanguage(id: string): void {
     if (this.viewMode !== 'presenting' || this.isBusy || !this.document.key) return;
+    if (this.document.burn === 'pending') return;
 
     const result = highlightContent(this.document.content, id === '' ? 'txt' : id);
     this.document.language = id === '' ? undefined : id;
     const ext = id === '' ? 'txt' : getExtensionForLanguage(id);
     const path = buildPath(this.document.key, ext);
     this.navigation.replacePath(path + window.location.hash, this.navigation.currentState());
-    if (!this.document.frozen) this.recent.record(this.document.key, path, this.document.content);
+    if (!this.document.frozen && !this.document.burn) {
+      this.recent.record(this.document.key, path, this.document.content);
+    }
     this.view.renderFullState(this.document, 'presenting', result.highlighted);
     this.syncChrome();
   }
@@ -482,7 +595,12 @@ export class AppController {
    * Handle duplicate button/shortcut
    */
   private handleDuplicate(): void {
-    if (this.viewMode === 'presenting' && this.activity === 'idle' && !this.document.frozen) {
+    if (
+      this.viewMode === 'presenting' &&
+      this.activity === 'idle' &&
+      !this.document.frozen &&
+      this.document.burn !== 'pending'
+    ) {
       const content = this.document.content;
       this.document.reset();
       this.document.content = content;
@@ -495,6 +613,7 @@ export class AppController {
    */
   private handleCopyLink(): void {
     if (this.viewMode !== 'presenting' || this.activity !== 'idle') return;
+    if (this.document.burn === 'burned') return;
 
     navigator.clipboard.writeText(window.location.href).then(
       () => this.notify.toast('Link copied to clipboard'),
@@ -510,6 +629,7 @@ export class AppController {
       this.viewMode === 'presenting' &&
       this.activity === 'idle' &&
       !this.document.frozen &&
+      !this.document.burn &&
       this.document.key
     ) {
       window.open(`/raw/${this.document.key}`, '_blank', 'noopener');
@@ -520,7 +640,7 @@ export class AppController {
    * Handle twitter button/shortcut
    */
   private handleTwitter(): void {
-    if (this.viewMode === 'presenting' && this.activity === 'idle') {
+    if (this.viewMode === 'presenting' && this.activity === 'idle' && !this.document.burn) {
       window.open('https://twitter.com/share?url=' + encodeURI(window.location.href));
     }
   }
