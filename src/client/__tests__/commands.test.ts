@@ -13,6 +13,41 @@ const ids = (ctx: Partial<CommandContext>) =>
   availableCommands({ ...base, ...ctx }).map((c) => c.id);
 
 describe('availableCommands', () => {
+  it('offers save options only while editing', () => {
+    expect(ids({ mode: 'editing' })).toEqual(expect.arrayContaining(['expiry', 'burn']));
+    expect(ids({})).not.toContain('expiry');
+    expect(ids({})).not.toContain('burn');
+  });
+
+  it('shows the chosen save options as hints', () => {
+    const hint = (id: string, ctx: Partial<CommandContext>) =>
+      availableCommands({ ...base, mode: 'editing', ...ctx }).find((c) => c.id === id)!.hint;
+    expect(hint('expiry', {})).toBe('default');
+    expect(hint('expiry', { lifetimeLabel: '1 week' })).toBe('1 week');
+    expect(hint('burn', {})).toBe('off');
+    expect(hint('burn', { burnNext: true })).toBe('on');
+    const burn = availableCommands({ ...base, mode: 'editing' }).find((c) => c.id === 'burn')!;
+    expect(burn.keepOpen).toBe(true);
+  });
+
+  it('never offers a read that would destroy a burn paste', () => {
+    for (const burn of ['armed', 'pending', 'burned'] as const) {
+      expect(ids({ burn })).not.toContain('raw');
+      expect(ids({ burn })).not.toContain('twitter');
+    }
+  });
+
+  it('hides content actions behind the burn gate and dead links once burned', () => {
+    const pending = ids({ burn: 'pending' });
+    expect(pending).not.toContain('duplicate');
+    expect(pending).not.toContain('find');
+    expect(pending).not.toContain('language');
+    expect(pending).toContain('copy-link');
+    expect(ids({ burn: 'armed' })).toContain('copy-link');
+    expect(ids({ burn: 'burned' })).not.toContain('copy-link');
+    expect(ids({ burn: 'burned' })).toContain('duplicate');
+  });
+
   it('offers paste actions while presenting', () => {
     expect(ids({})).toEqual([
       'save',
