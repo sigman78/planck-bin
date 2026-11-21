@@ -2,7 +2,6 @@
     /* background layers (darkest to lightest) */
     --color-bg:          #002b36;   /* page/body background (solarized base03) */
     --color-key-bg:      #00222b;   /* drop overlay plaque */
-    --color-tooltip-bg:  #173e48;   /* info toast background */
 
     /* content colors */
     --color-editor-text: #93a1a1;   /* editor text (solarized base1) */
@@ -13,7 +12,9 @@
     --color-focus-muted: #2b5c68;   /* quiet focus ring: viewer (its left edge runs along the gutter) and gutter links */
 
     /* ui / overlay colors */
-    --color-toast-bg:    #a31515;   /* error toast background (info toasts reuse tooltip bg) */
+    --color-toast-bg:    rgba(0, 22, 28, 0.96);   /* toast background (island panel tone) */
+    --color-toast-error-bg: #a31515;              /* error toast background */
+    --color-toast-edge:  rgba(255, 255, 255, 0.1); /* toast hairline outline */
     --color-text-bright: #fff;      /* toast text, tooltip label */
     --color-line-highlight: rgba(255, 255, 255, 0.03); /* current line highlight */
     --color-selection:   #114955;   /* solid selection background with stronger contrast */
@@ -71,36 +72,55 @@
     width: 0%;
 }
 
+/* One look for every toast; brief ones only differ in duration. Top center,
+   below the island: clear of the virtual keyboard and of the caret. */
 #toast {
     position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--color-tooltip-bg);
-    color: var(--color-text-bright);
-    padding: 10px 20px;
-    border-radius: 3px;
-    font-family: var(--font-ui);
-    font-size: var(--font-size-editor);
-    z-index: 2000;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-    white-space: nowrap;
-}
-
-#toast.error {
+    top: calc(54px + env(safe-area-inset-top, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    width: fit-content;
+    max-width: 440px;
+    margin-inline: auto;
+    box-sizing: border-box;
+    padding: 11px 20px;
+    border-radius: 9px;
     background: var(--color-toast-bg);
-}
-
-#toast.brief {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
+    color: var(--color-text-bright);
+    box-shadow:
+        0 0 0 1px var(--color-toast-edge),
+        0 8px 24px rgba(0, 0, 0, 0.35);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: center;
+    overflow-wrap: anywhere;
+    z-index: 2000;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 #toast.visible {
     opacity: 1;
+    transform: none;
+    transition: opacity 0.2s ease, transform 0.32s var(--island-spring);
+}
+
+#toast.error {
+    background: var(--color-toast-error-bg);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.16),
+        0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #toast,
+    #toast.visible {
+        transform: none;
+        transition: opacity 0.12s linear;
+    }
 }
 
 html, body {
