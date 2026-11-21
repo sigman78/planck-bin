@@ -293,7 +293,6 @@ test.describe('Command palette', () => {
     await runCommand(page, 'Zoom in');
     await expect(toast).toHaveText('Font size 110%');
     await expect(toast).toHaveClass(/visible/);
-    await expect(toast).toHaveClass(/brief/);
 
     await runCommand(page, 'Reset zoom');
     await expect(toast).toHaveText('Font size 100%');

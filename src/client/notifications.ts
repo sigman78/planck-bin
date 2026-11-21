@@ -9,9 +9,11 @@ export type ToastKind = 'info' | 'error';
 
 const TOAST_DURATION_MS = 4000;
 const BRIEF_DURATION_MS = 1200;
+/** Errors wrap more often and need reading time. */
+const ERROR_DURATION_MS = 6000;
 
 export interface ToastOptions {
-  /** Compact, short-lived status (e.g. the zoom level). */
+  /** Short-lived status (e.g. the zoom level); same look, shorter duration. */
   brief?: boolean;
 }
 
@@ -36,7 +38,6 @@ export class Notifications {
       toast.textContent = message;
     }
     toast.classList.toggle('error', kind === 'error');
-    toast.classList.toggle('brief', options.brief === true);
     toast.classList.add('visible');
     if (this.toastTimer !== null) clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(
@@ -44,7 +45,7 @@ export class Notifications {
         toast.classList.remove('visible');
         this.toastTimer = null;
       },
-      options.brief ? BRIEF_DURATION_MS : TOAST_DURATION_MS
+      kind === 'error' ? ERROR_DURATION_MS : options.brief ? BRIEF_DURATION_MS : TOAST_DURATION_MS
     );
   }
 
