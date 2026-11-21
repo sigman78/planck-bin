@@ -16,6 +16,8 @@ import { ViewerFind, type FindStatus } from './viewer-find';
 import type { Highlighted } from './highlight-config';
 import { clearSyntax, paintSyntax, supportsHighlights, viewerText } from './syntax-highlights';
 import { currentTheme } from './highlight-theme';
+import { PrintListing, type PrintSource } from './print-listing';
+import type { TokenSpans } from './syntax-highlights';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
@@ -52,6 +54,8 @@ export class ViewManager {
   private currentLine: number = 0;
   private dragCounter: number = 0;
   private finder: ViewerFind;
+  /** Spans painted over the viewer text, reused by the print listing. */
+  private paintedSpans: TokenSpans | null = null;
 
   constructor(options: RenderOptions) {
     this.appName = options.appName;
@@ -70,6 +74,23 @@ export class ViewManager {
     if (this.highlightCurrentLine) {
       this.lineHighlight = document.getElementById('line-highlight') as HTMLDivElement;
     }
+
+    new PrintListing(() => this.printSource());
+  }
+
+  /** What to print: the viewer's text and spans, or the editor's text; nothing behind a gate. */
+  private printSource(): PrintSource | null {
+    const numbers = this.lineNumbers;
+    if (this.viewer.style.display !== 'none') {
+      const text = this.viewerCode.textContent ?? '';
+      if (text === '' || this.viewer.classList.contains('is-loading')) return null;
+      return { text, spans: this.paintedSpans, numbers };
+    }
+    if (this.editor.style.display !== 'none') {
+      if (this.editor.value === '') return null;
+      return { text: viewerText(this.editor.value), spans: null, numbers };
+    }
+    return null;
   }
 
   /**
@@ -161,6 +182,7 @@ export class ViewManager {
   renderFullState(state: Paste, mode: 'editing' | 'presenting', highlighted?: Highlighted): void {
     this.finder.clear();
     clearSyntax();
+    this.paintedSpans = null;
     this.editor.classList.remove('is-loading');
     this.viewer.classList.remove('is-loading');
 
@@ -203,11 +225,13 @@ export class ViewManager {
     if (!reuse) this.viewerCode.textContent = shown;
     const text = this.viewerCode.firstChild;
     if (!(text instanceof Text) || !highlighted.runs || !supportsHighlights()) return;
-    paintSyntax(text, currentTheme().spans(highlighted.runs));
+    this.paintedSpans = currentTheme().spans(highlighted.runs);
+    paintSyntax(text, this.paintedSpans);
   }
 
   renderLoadingState(): void {
     clearSyntax();
+    this.paintedSpans = null;
     this.editor.style.display = 'none';
     this.viewer.style.display = 'block';
     this.viewer.classList.add('is-loading');

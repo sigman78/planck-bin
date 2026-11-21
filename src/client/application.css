@@ -308,13 +308,116 @@ body {
     pointer-events: none;
 }
 
-/* --- hide elements for printing --- */
-.no-print {}
+/* --- printing ---------------------------------------------------------------
+   Printing shows only #print-listing (print-listing.ts builds it on
+   beforeprint): one row per line, so long lines wrap under their own number.
+   Syntax colors are the theme's highlight rules; the variables they read are
+   redefined here as a light palette darkened for paper. */
+#print-listing {
+    display: none;
+}
 
 @media print {
-	.no-print {
-		display: none !important;
-	}
+    @page {
+        size: auto;
+        margin: 16mm 14mm 16mm 14mm;
+
+        @top-left,
+        @top-right,
+        @bottom-right {
+            font-family: var(--font-ui);
+            font-size: 8pt;
+            color: #657b83;
+        }
+
+        @bottom-right {
+            content: counter(page) " / " counter(pages);
+        }
+    }
+
+    html,
+    body {
+        height: auto;
+        background: #fff !important;
+    }
+
+    body {
+        padding: 0;
+    }
+
+    body > :not(#print-listing),
+    .no-print {
+        display: none !important;
+    }
+
+    #print-listing {
+        display: block;
+        color: #1c2b31;
+        font-family: var(--font-editor);
+        font-size: 8.5pt;
+        line-height: 1.4;
+        tab-size: 2; /* as on screen */
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+
+        /* Theme variables (solarized-dark-hljs.css), light and darkened for paper. */
+        --sol-base03: #fdf6e3;
+        --sol-base02: #eee8d5;
+        --sol-base01: #93a1a1;
+        --sol-base0: #1c2b31;
+        --sol-yellow: #8a6500;
+        --sol-orange: #b0461a;
+        --sol-red: #c0272d;
+        --sol-cyan: #1a7f78;
+        --sol-blue: #1d5fa6;
+        --sol-green: #5c7a00;
+        --color-bg: #fff;
+        --color-bg-highlight: var(--sol-base02);
+        --color-selection: transparent;
+        --color-text: var(--sol-base0);
+        --color-punctuation: #6f8187;
+        --color-comment: #4f6066;
+        --color-comment-bg: #efeadb;
+        --color-constant: var(--sol-cyan);
+        --color-definition: var(--sol-blue);
+        --color-special: var(--sol-orange);
+        --color-deletion: var(--sol-red);
+        --color-addition: var(--sol-green);
+        --color-diff: var(--sol-blue);
+    }
+
+    .pl-row {
+        display: flex;
+        break-inside: avoid;
+    }
+
+    .pl-num {
+        flex: none;
+        box-sizing: content-box;
+        width: calc(var(--print-digits) * 1ch);
+        padding-right: 2.5mm;
+        margin-right: 3mm;
+        border-right: 0.5pt solid #d3cbb7;
+        text-align: right;
+        color: #93a1a1;
+        user-select: none;
+    }
+
+    .no-numbers .pl-num {
+        display: none;
+    }
+
+    .pl-code {
+        flex: 1;
+        min-width: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    /* An empty line still takes its row height. */
+    .pl-code:empty::before {
+        content: " ";
+    }
 }
 
 
