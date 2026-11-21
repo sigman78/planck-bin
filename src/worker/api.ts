@@ -4,11 +4,17 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { Env } from './types';
-import type { SaveResponse } from '../shared/types';
+import { BURN_PENDING, type CreateOptions, type Env } from './types';
+import { LIFETIMES, isLifetimeId, type BurnPending, type SaveResponse } from '../shared/types';
 import { createStore } from './storage';
 import { getServerConfig } from './config';
-import { countView, loadDocument, toGetResponse, type LoadedDocument } from './documents';
+import {
+  countView,
+  isoOrNull,
+  loadDocument,
+  toGetResponse,
+  type LoadedDocument,
+} from './documents';
 import { etagMatches, isJsonContentType } from './http';
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -31,16 +37,29 @@ function applyDocumentCacheHeaders(c: AppContext, doc: LoadedDocument): void {
   c.header('Cache-Control', maxAge > 0 ? `public, max-age=${maxAge}` : 'no-cache');
 }
 
-/** Shared GET flow: load, 404, cache headers, 304, else `send`. */
+/**
+ * Shared GET flow: load, 404, cache headers, 304, else `send`.
+ *
+ * Burn-after-reading pastes: a GET without ?peek reads and deletes them, and
+ * the response is never cached. HEAD and ?peek=1 leave them in place and get
+ * `pending` instead (no content).
+ */
 async function serveDocument(
   c: AppContext,
   send: (doc: LoadedDocument) => Response,
+  pending: (key: string) => Response,
   notFound: () => Response,
   failed: () => Response
 ): Promise<Response> {
   try {
-    const doc = await loadDocument(c, c.req.param('id') ?? '');
+    const key = c.req.param('id') ?? '';
+    const consume = c.req.method === 'GET' && c.req.query('peek') === undefined;
+    const doc = await loadDocument(c, key, { consume });
     if (!doc) return notFound();
+    if (doc === BURN_PENDING || doc.burn) {
+      c.header('Cache-Control', 'no-store');
+      return doc === BURN_PENDING ? pending(key) : send(doc);
+    }
 
     applyDocumentCacheHeaders(c, doc);
     if (etagMatches(c.req.header('if-none-match'), doc.etag)) return c.body(null, 304);
@@ -57,6 +76,7 @@ api.get('/documents/:id', (c) =>
   serveDocument(
     c,
     (doc) => c.json(toGetResponse(doc)),
+    (key) => c.json({ key, burnPending: true } satisfies BurnPending),
     () => c.json({ message: 'Document not found' }, 404),
     () => c.json({ message: 'Error retrieving document' }, 500)
   )
@@ -67,15 +87,48 @@ api.get('/raw/:id', (c) =>
   serveDocument(
     c,
     (doc) => c.text(doc.content, 200, { 'Content-Type': 'text/plain; charset=utf-8' }),
+    () =>
+      c.text('Burn after reading: request without ?peek to read (and destroy) it', 200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+      }),
     () => c.text('Document not found', 404),
     () => c.text('Error retrieving document', 500)
   )
 );
 
+const EXPIRES_HELP = `expires must be one of ${Object.keys(LIFETIMES).join(', ')}`;
+
+/**
+ * Creation options come from the query string, so they work with both plain
+ * and JSON bodies, and a bare POST keeps the old defaults:
+ * ?expires=3d|1w|1mo|6mo|never and ?burn=1.
+ */
+export function parseCreateOptions(query: URLSearchParams): CreateOptions | { error: string } {
+  const options: CreateOptions = {};
+
+  const expires = query.get('expires');
+  if (expires !== null) {
+    if (!isLifetimeId(expires)) return { error: EXPIRES_HELP };
+    options.expireDays = LIFETIMES[expires];
+  }
+
+  const burn = query.get('burn');
+  if (burn !== null) {
+    const value = burn.trim().toLowerCase();
+    if (value === '1' || value === 'true') options.burn = true;
+    else if (value !== '0' && value !== 'false') return { error: 'burn must be 1 or 0' };
+  }
+
+  return options;
+}
+
 // Create new document
 api.post('/documents', async (c) => {
   const store = createStore(c.env);
   const config = getServerConfig(c.env);
+
+  const options = parseCreateOptions(new URL(c.req.url).searchParams);
+  if ('error' in options) return c.json({ message: options.error }, 400);
 
   try {
     // Checked before reading the body: a full database refuses every paste.
@@ -118,12 +171,17 @@ api.post('/documents', async (c) => {
       );
     }
 
-    const key = await store.create(content, {
-      strategy: config.keyStrategy,
-      length: config.keyLength,
-    });
+    const { key, expiresAt } = await store.create(
+      content,
+      { strategy: config.keyStrategy, length: config.keyLength },
+      options
+    );
 
-    const response: SaveResponse = { key };
+    const response: SaveResponse = {
+      key,
+      expiresAt: isoOrNull(expiresAt),
+      ...(options.burn ? { burn: true } : {}),
+    };
     return c.json(response, 201);
   } catch (error) {
     console.error('Error saving document:', error);

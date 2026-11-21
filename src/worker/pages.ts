@@ -9,7 +9,8 @@ import type { Context } from 'hono';
 import type { Env } from './types';
 import { getServerConfig } from './config';
 import { countView, loadDocumentWithin, toGetResponse } from './documents';
-import { renderDocumentPage, renderNotFoundPage } from './render';
+import { renderBurnPage, renderDocumentPage, renderNotFoundPage } from './render';
+import { BURN_PENDING } from './types';
 import { isReadAllowed } from './request-policy';
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -90,6 +91,15 @@ async function renderRoute(
     // tokens, which slows scrapers that enumerate paste URLs.
     if (!(await isReadAllowed(c))) return null;
     const doc = await loadDocumentWithin(c, route.key, MAX_RENDER_CHARS);
+    // The page never reads a burn paste: the client shows a reveal prompt.
+    if (doc === BURN_PENDING) {
+      const html = renderBurnPage(await shell.clone().text(), route.key);
+      if (html === null) return null;
+      return new Response(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+      });
+    }
     // Too large (by D1's code-point count, or by the JS UTF-16 count, which can
     // be higher): the plain shell, and the client fetches the paste.
     if (doc === 'too-large' || (doc && doc.content.length > MAX_RENDER_CHARS)) return null;

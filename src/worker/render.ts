@@ -64,6 +64,15 @@ export function renderNotFoundPage(shell: string, key: string): string | null {
   return embed(shell, { key, notFound: true });
 }
 
+/**
+ * The shell for an unread burn-after-reading paste: no content and no preview
+ * tags, only a marker, so the client asks before reading (and destroying) it.
+ * Link unfurlers and prefetchers that load the page consume nothing.
+ */
+export function renderBurnPage(shell: string, key: string): string | null {
+  return embed(shell, { key, burnPending: true });
+}
+
 /** Insert the payload as inert JSON just before </body>. */
 function embed(html: string, payload: EmbeddedPayload): string | null {
   const data =
