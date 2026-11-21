@@ -13,6 +13,9 @@
 
 import type { Paste } from './paste';
 import { ViewerFind, type FindStatus } from './viewer-find';
+import type { Highlighted } from './highlight-config';
+import { clearSyntax, paintSyntax, supportsHighlights, viewerText } from './syntax-highlights';
+import { currentTheme } from './highlight-theme';
 import './solarized-dark-hljs.css';
 
 export interface ViewCallbacks {
@@ -155,18 +158,19 @@ export class ViewManager {
   /**
    * Render full state including editor (for loading/reset)
    */
-  renderFullState(state: Paste, mode: 'editing' | 'presenting', highlightedContent?: string): void {
+  renderFullState(state: Paste, mode: 'editing' | 'presenting', highlighted?: Highlighted): void {
     this.finder.clear();
+    clearSyntax();
     this.editor.classList.remove('is-loading');
     this.viewer.classList.remove('is-loading');
 
-    if (mode === 'presenting' && highlightedContent) {
+    if (mode === 'presenting' && highlighted) {
       // Present mode: show viewer, hide editor
       this.editor.value = '';
       this.editor.style.display = 'none';
       this.viewer.style.display = 'block';
-      this.viewerCode.innerHTML = highlightedContent;
-      const lineCount = (highlightedContent.match(/\n/g) ?? []).length + 1;
+      this.renderViewerContent(state.content, highlighted);
+      const lineCount = (viewerText(state.content).match(/\n/g) ?? []).length + 1;
       this.updateGutter(lineCount, true);
       // this.resetLineHighlight();
       this.highlightAnchorLine();
@@ -177,14 +181,33 @@ export class ViewManager {
       this.editor.value = state.content;
       this.editor.focus();
       this.editor.scrollTop = 0; // force reflow so field-sizing:content takes effect immediately
-      const lineCount = state.content === '' ? 1 : (state.content.match(/\n/g) ?? []).length + 1;
+      const lineCount =
+        state.content === '' ? 1 : (viewerText(state.content).match(/\n/g) ?? []).length + 1;
       this.updateGutter(lineCount, false);
       this.updateLineHighlight();
     }
     this.renderUIState(state);
   }
 
+  /**
+   * Fill the viewer: one plain text node with LF line endings (the
+   * server-rendered one is kept when it matches), with the tokens painted over
+   * it as highlight ranges. Without the Custom Highlight API the paste stays
+   * plain text.
+   */
+  private renderViewerContent(content: string, highlighted: Highlighted): void {
+    const shown = viewerText(content);
+    const first = this.viewerCode.firstChild;
+    const reuse =
+      first instanceof Text && first === this.viewerCode.lastChild && first.data === shown;
+    if (!reuse) this.viewerCode.textContent = shown;
+    const text = this.viewerCode.firstChild;
+    if (!(text instanceof Text) || !highlighted.runs || !supportsHighlights()) return;
+    paintSyntax(text, currentTheme().spans(highlighted.runs));
+  }
+
   renderLoadingState(): void {
+    clearSyntax();
     this.editor.style.display = 'none';
     this.viewer.style.display = 'block';
     this.viewer.classList.add('is-loading');

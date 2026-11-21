@@ -3,6 +3,8 @@
 // This reduces bundle size significantly compared to importing all languages
 
 import hljs from 'highlight.js/lib/core';
+import type { HLJSOptions } from 'highlight.js';
+import { RangeEmitter, runsFromResult, viewerText } from './syntax-highlights';
 
 // Import only commonly used languages
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -96,6 +98,9 @@ hljs.registerLanguage('erlang', erlang);
 hljs.registerLanguage('erl', erlang);
 hljs.registerLanguage('haskell', haskell);
 hljs.registerLanguage('hs', haskell);
+
+// Record token ranges instead of building a tree and HTML (syntax-highlights.ts).
+hljs.configure({ __emitter: RangeEmitter as unknown as HLJSOptions['__emitter'] });
 
 // Additional aliases for common file extensions
 hljs.registerLanguage('js', javascript);
@@ -231,12 +236,23 @@ export function listLanguages(): LanguageOption[] {
 }
 
 /**
+ * Highlighted paste: the token runs, resolved against the theme when painted
+ * (highlight-theme.ts). Offsets refer to viewerText(content). Null for plain
+ * text and for results whose runs could not be mapped.
+ */
+export interface Highlighted {
+  runs: RangeEmitter | null;
+}
+
+/**
  * Result of highlighting operation
  */
 export interface HighlightResult {
-  highlighted: string;
+  highlighted: Highlighted;
   language: string | undefined;
 }
+
+const plain = (): Highlighted => ({ runs: null });
 
 /**
  * Highlight content with optional language hint
@@ -244,54 +260,28 @@ export interface HighlightResult {
  * This performs highlighting in a single pass to avoid duplicate work
  */
 export function highlightContent(content: string, language?: string): HighlightResult {
+  // Tokenize what the viewer shows, so run offsets match its text node.
+  const text = viewerText(content);
+
   // Plain text - no highlighting needed
   if (language === 'txt' || language === '') {
-    return {
-      highlighted: escapeHtml(content),
-      language: undefined,
-    };
+    return { highlighted: plain(), language: undefined };
   }
 
   const canUseLanguage = language && hljs.getLanguage(language);
 
   // Highlighting is synchronous. Bound attacker-controlled work so opening a
   // large paste cannot freeze the viewer tab.
-  if (
-    content.length > (canUseLanguage ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)
-  ) {
-    return {
-      highlighted: escapeHtml(content),
-      language: canUseLanguage ? language : undefined,
-    };
+  if (text.length > (canUseLanguage ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)) {
+    return { highlighted: plain(), language: canUseLanguage ? language : undefined };
   }
 
-  // Language specified - use it directly
-  if (canUseLanguage) {
-    const result = hljs.highlight(content, { language });
-    return {
-      highlighted: result.value,
-      language: result.language,
-    };
-  }
-
-  // No language specified - auto-detect
-  const result = hljs.highlightAuto(content);
+  // Language specified - use it directly; otherwise auto-detect
+  const result = canUseLanguage ? hljs.highlight(text, { language }) : hljs.highlightAuto(text);
   return {
-    highlighted: result.value,
+    highlighted: { runs: runsFromResult(result._emitter, text) },
     language: result.language,
   };
-}
-
-/**
- * Escape HTML for safe display
- */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 export default hljs;
