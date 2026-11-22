@@ -3,6 +3,7 @@
 // This reduces bundle size significantly compared to importing all languages
 
 import hljs from 'highlight.js/lib/core';
+import { looksLikeMarkdown } from './markdown-detect';
 import type { HLJSOptions } from 'highlight.js';
 import { RangeEmitter, runsFromResult, viewerText } from './syntax-highlights';
 
@@ -268,16 +269,23 @@ export function highlightContent(content: string, language?: string): HighlightR
     return { highlighted: plain(), language: undefined };
   }
 
-  const canUseLanguage = language && hljs.getLanguage(language);
+  // A known language is used as is. Otherwise markdown is sniffed first:
+  // auto-detect mistakes its headings for Ruby or Python comments.
+  const known =
+    language && hljs.getLanguage(language)
+      ? language
+      : looksLikeMarkdown(text)
+        ? 'markdown'
+        : undefined;
 
   // Highlighting is synchronous. Bound attacker-controlled work so opening a
   // large paste cannot freeze the viewer tab.
-  if (text.length > (canUseLanguage ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)) {
-    return { highlighted: plain(), language: canUseLanguage ? language : undefined };
+  if (text.length > (known ? MAX_EXPLICIT_HIGHLIGHT_LENGTH : MAX_AUTO_HIGHLIGHT_LENGTH)) {
+    return { highlighted: plain(), language: known };
   }
 
-  // Language specified - use it directly; otherwise auto-detect
-  const result = canUseLanguage ? hljs.highlight(text, { language }) : hljs.highlightAuto(text);
+  // Language known - use it directly; otherwise auto-detect
+  const result = known ? hljs.highlight(text, { language: known }) : hljs.highlightAuto(text);
   return {
     highlighted: { runs: runsFromResult(result._emitter, text) },
     language: result.language,

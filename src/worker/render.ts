@@ -22,6 +22,7 @@ import {
   type GetResponse,
   type LockedPending,
 } from '../shared/types';
+import { PREVIEW_BY_DEFAULT, PREVIEW_DEFAULT_ATTR } from '../shared/preview';
 
 /** The empty viewer as it appears in the built shell (src/client/index.html). */
 const VIEWER_A11Y = 'tabindex="0" role="region" aria-label="Paste content"';
@@ -49,8 +50,10 @@ export function renderDocumentPage(shell: string, input: RenderInput): string | 
     `<meta property="og:title" content="${escapeAttribute(displayName)}" />`;
   let html = shell.slice(0, titleStart) + title + shell.slice(titleEnd + TITLE_CLOSE.length);
 
+  // A paste that opens in preview: CSS keeps this source hidden until the client decides.
+  const previewDefault = PREVIEW_BY_DEFAULT.has(doc.key) ? ` ${PREVIEW_DEFAULT_ATTR}` : '';
   const viewer =
-    `<pre id="viewer" style="display: block" ${VIEWER_A11Y}><code class="hljs">` +
+    `<pre id="viewer" style="display: block" ${VIEWER_A11Y}${previewDefault}><code class="hljs">` +
     escapeText(doc.content) +
     '</code></pre>';
   const withViewer = replaceOnce(html, VIEWER_ANCHOR, viewer);

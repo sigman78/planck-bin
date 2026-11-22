@@ -13,6 +13,8 @@ export interface PrintSource {
   text: string;
   /** Number the lines (the lineNumbers option). */
   numbers: boolean;
+  /** A rendered preview on screen: printed as that document instead of a listing. */
+  rendered?: HTMLElement;
 }
 
 const LISTING_ID = 'print-listing';
@@ -32,6 +34,10 @@ export class PrintListing {
     this.teardown();
     const src = this.source();
     if (!src) return;
+    if (src.rendered) {
+      this.buildDocument(src.rendered);
+      return;
+    }
 
     const lines = src.text.split('\n');
     const listing = document.createElement('div');
@@ -60,17 +66,29 @@ export class PrintListing {
     this.setPageBoxes(lines.length);
   }
 
+  /** The rendered preview, copied as is; its own print rules make it black on white. */
+  private buildDocument(rendered: HTMLElement): void {
+    const doc = document.createElement('div');
+    doc.id = LISTING_ID;
+    doc.className = 'markdown-body';
+    doc.setAttribute('aria-hidden', 'true');
+    for (const node of Array.from(rendered.childNodes)) doc.appendChild(node.cloneNode(true));
+    document.body.appendChild(doc);
+    this.setPageBoxes(null);
+  }
+
   teardown(): void {
     document.getElementById(LISTING_ID)?.remove();
     document.getElementById(PAGE_STYLE_ID)?.remove();
   }
 
   /** Running header (address, line count) and page numbers in the page margins. */
-  private setPageBoxes(lineCount: number): void {
+  private setPageBoxes(lineCount: number | null): void {
     const style = document.createElement('style');
     style.id = PAGE_STYLE_ID;
     const where = `${location.host}${location.pathname === '/' ? '' : location.pathname}`;
-    const count = `${lineCount} ${lineCount === 1 ? 'line' : 'lines'}`;
+    // A rendered document has no lines to count.
+    const count = lineCount === null ? '' : `${lineCount} ${lineCount === 1 ? 'line' : 'lines'}`;
     style.textContent =
       `@page { @top-left { content: ${cssString(where)}; } ` +
       `@top-right { content: ${cssString(count)}; } }`;

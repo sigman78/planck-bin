@@ -31,8 +31,10 @@ import {
 } from './lock-crypto';
 import { LifetimeStore } from './lifetime-store';
 import { LIFETIMES, LIFETIME_LABELS, isLifetimeId, type LifetimeId } from '../shared/types';
+import { PREVIEW_BY_DEFAULT } from '../shared/preview';
 import type { PaletteItem } from './commands';
 import { DocumentSession } from './document-session';
+import { findPreviewMode, preloadPreviews, renderPreview, type PreviewMode } from './preview';
 import { NavigationState, type HistoryState } from './navigation-state';
 import { Notifications } from './notifications';
 import { DraftStore } from './draft-store';
@@ -48,6 +50,12 @@ const FIRST_HINT_MS = 8000;
 const CLEAR_RECENT_ID = '/clear';
 /** Expires submenu item for the server default lifetime (never a preset id). */
 const DEFAULT_LIFETIME_ID = 'default';
+/** Link hash that opens a paste in its preview mode (e.g. rendered markdown). */
+// The URL hash records only a departure from the paste's default view.
+const PREVIEW_HASH = '#preview';
+const SOURCE_HASH = '#source';
+/** Built-in pages open in preview unless the link asks for something else. */
+
 /** Recent-list preview of a protected paste: its text never goes to localStorage. */
 const LOCKED_PREVIEW = 'Protected paste';
 
@@ -95,6 +103,12 @@ export class AppController {
   private pendingLock: PendingLock | null = null;
   /** Passphrases of protected pastes saved in this tab, for "Copy passphrase". Memory only. */
   private passphrases = new Map<string, string>();
+  /** The paste on screen should show its preview (when it has a preview mode). */
+  private previewOn = false;
+  /** The preview renderer is loading. */
+  private previewBusy = false;
+  /** Bumped by every preview update, so a slow render never lands on a newer state. */
+  private previewToken = 0;
 
   // State machine
   private viewMode: ViewMode = 'editing';
@@ -139,12 +153,20 @@ export class AppController {
         lock: this.document.locked ? (this.pendingLock ? 'pending' : 'open') : undefined,
         lockNext: this.lockNext !== null,
         hasPassphrase: this.document.key !== undefined && this.passphrases.has(this.document.key),
+        preview: this.previewContext(),
       }),
       run: (id) => this.runCommand(id),
       submenu: (id) => this.submenuItems(id),
       runSubmenu: (menuId, itemId) => this.runSubmenuItem(menuId, itemId),
-      goToLine: (line) => this.view.goToLine(line),
-      find: (text, step) => this.view.find(text, step),
+      // Both work on the source text: leave the preview first.
+      goToLine: (line) => {
+        this.leavePreview();
+        this.view.goToLine(line);
+      },
+      find: (text, step) => {
+        this.leavePreview();
+        return this.view.find(text, step);
+      },
       clearFind: () => this.view.clearFind(),
     });
 
@@ -177,6 +199,30 @@ export class AppController {
     this.view.init();
     this.palette.init();
     this.initHints();
+    // A hand-edited or pasted link: #preview turns it on, #source or a #L line anchor off.
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash;
+      if (hash === PREVIEW_HASH && !this.previewOn) this.setPreviewOn(true);
+      else if ((hash === SOURCE_HASH || hash.startsWith('#L')) && this.previewOn) {
+        this.setPreviewOn(false);
+      }
+    });
+    // Keep the entry's remembered position current, so a reload returns to where
+    // the page was, not to one captured at the last navigation (scroll
+    // restoration is manual). Recorded once scrolling settles: browsers drop
+    // history updates made while the page unloads, and throttle frequent ones.
+    let scrollTimer: number | undefined;
+    window.addEventListener(
+      'scroll',
+      () => {
+        window.clearTimeout(scrollTimer);
+        scrollTimer = window.setTimeout(() => {
+          const { pathname, search, hash } = window.location;
+          this.navigation.captureScroll(pathname + search + hash);
+        }, 150);
+      },
+      { passive: true }
+    );
     window.addEventListener('beforeunload', (e) => {
       // Unsaved text, or a revealed burn paste (no copy is left anywhere else).
       const unsaved = this.viewMode === 'editing' && this.document.content.trim() !== '';
@@ -257,6 +303,8 @@ export class AppController {
       const burn = result.paste.burn !== undefined;
       this.burnNext = false;
       this.lockNext = null;
+      // A fresh save shows its source; the preview is one click away.
+      this.previewOn = false;
       if (passphrase !== undefined) this.passphrases.set(result.paste.key, passphrase);
       // A burn paste is one-shot: no preview of it is kept in localStorage.
       if (!burn) this.recordRecent(result.paste.key, result.canonicalPath);
@@ -305,6 +353,11 @@ export class AppController {
 
     this.pendingBurn = null;
     this.pendingLock = null;
+    // Read before the canonical path replaces the URL (and its hash).
+    this.previewOn = this.wantsPreview(path);
+    // Opening into a preview: no flash of source, and the renderer loads alongside the paste.
+    this.view.setPreviewPending(this.previewOn);
+    if (this.previewOn) preloadPreviews();
     // A server-rendered page already shows the text: don't blank it while "loading".
     const hideWhileLoading = this.isFirstLoad && !hasEmbeddedDocument(path.key);
     this.isFirstLoad = false;
@@ -333,16 +386,19 @@ export class AppController {
         this.navigation.replacePath(result.canonicalPath);
       }
 
-      const targetScrollY = historyState?.scrollY ?? 0;
+      // A remembered position (back/forward) wins; otherwise a #L link names the line to show.
+      const remembered = historyState?.scrollY;
 
       // Render with transition
       this.transitionToView(defaultMode, {
         highlighted: defaultMode === 'presenting' ? result.highlighted : undefined,
-        scrollY: targetScrollY,
+        scrollY: remembered ?? 0,
+        revealAnchor: remembered === undefined,
         animate,
       });
     } catch (err) {
       this.activity = 'idle';
+      this.view.setPreviewPending(false);
       if (err instanceof BurnPendingError) {
         this.showBurnGate(path);
         return;
@@ -619,7 +675,13 @@ export class AppController {
 
   private transitionToView(
     mode: ViewMode,
-    options: { highlighted?: Highlighted; scrollY?: number | null; animate?: boolean } = {}
+    options: {
+      highlighted?: Highlighted;
+      scrollY?: number | null;
+      /** Scroll to the #L line instead, if the URL has one. */
+      revealAnchor?: boolean;
+      animate?: boolean;
+    } = {}
   ): void {
     this.viewMode = mode;
     this.pendingBurn = null;
@@ -629,9 +691,11 @@ export class AppController {
     this.palette.close(false);
     const render = () => {
       this.view.renderFullState(this.document, mode, options.highlighted);
+      void this.applyPreview();
       this.syncChrome();
       this.palette.settle();
-      if (options.scrollY !== null && options.scrollY !== undefined) {
+      const revealed = options.revealAnchor === true && this.view.revealAnchorLine();
+      if (!revealed && options.scrollY !== null && options.scrollY !== undefined) {
         window.scrollTo({ top: options.scrollY, behavior: 'instant' });
       }
     };
@@ -671,6 +735,99 @@ export class AppController {
   }
 
   /** Reflect mode, save availability and save options in the island. */
+  /** The preview mode for the paste on screen, if it is presented and has one. */
+  private previewMode(): PreviewMode | null {
+    if (this.viewMode !== 'presenting' || !this.document.key) return null;
+    if (this.document.burn === 'pending' || this.pendingLock) return null;
+    return findPreviewMode(this.document.language, this.document.content);
+  }
+
+  private previewContext(): { label: string; on: boolean } | undefined {
+    const mode = this.previewMode();
+    return mode ? { label: mode.label, on: this.previewOn } : undefined;
+  }
+
+  /** Open a paste in preview: the link says so, or it is a built-in page without a line anchor. */
+  private wantsPreview(path: ParsedPath): boolean {
+    const hash = window.location.hash;
+    if (hash === PREVIEW_HASH) return true;
+    return hash === '' && PREVIEW_BY_DEFAULT.has(path.key);
+  }
+
+  private previewByDefault(): boolean {
+    return PREVIEW_BY_DEFAULT.has(this.document.key ?? '');
+  }
+
+  private setPreviewOn(on: boolean): void {
+    if (on && !this.previewMode()) return;
+    this.previewOn = on;
+    void this.applyPreview();
+  }
+
+  /** Back to the source before a command that works on it (find, go to line). */
+  private leavePreview(): void {
+    if (this.previewOn) this.setPreviewOn(false);
+  }
+
+  private togglePreview(): void {
+    if (!this.previewMode()) return;
+    this.setPreviewOn(!this.previewOn);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  /**
+   * Bring the screen in line with previewOn: render the preview (its chunk
+   * loads on first use) or show the source, and keep the #preview hash in step.
+   */
+  private async applyPreview(): Promise<void> {
+    const mode = this.previewMode();
+    if (!mode) this.previewOn = false;
+    const token = ++this.previewToken;
+    this.previewBusy = false;
+
+    if (!mode || !this.previewOn) {
+      this.view.setPreviewPending(false);
+      this.view.setPreview(null);
+      this.syncPreviewHash();
+      this.syncChrome();
+      return;
+    }
+
+    this.previewBusy = true;
+    this.syncChrome();
+    try {
+      const fragment = await renderPreview(mode, this.document.content);
+      if (token !== this.previewToken) return;
+      this.view.setPreview(fragment);
+    } catch (err) {
+      if (token !== this.previewToken) return;
+      console.error('Preview failed:', err);
+      this.previewOn = false;
+      this.view.setPreviewPending(false);
+      this.view.setPreview(null);
+      const tooLarge = err instanceof Error && err.message === 'Too large to preview';
+      this.notify.toast(
+        tooLarge ? 'Too large to preview.' : 'Could not load the preview.',
+        'error'
+      );
+    }
+    this.previewBusy = false;
+    this.syncPreviewHash();
+    this.syncChrome();
+  }
+
+  /** #preview in the address while the preview is on, so a copied link opens the same way. */
+  private syncPreviewHash(): void {
+    const hash = window.location.hash;
+    const fallback = this.previewByDefault();
+    const wanted = this.previewOn === fallback ? '' : this.previewOn ? PREVIEW_HASH : SOURCE_HASH;
+    // A #L line anchor stays while the source shows.
+    const ours = hash === '' || hash === PREVIEW_HASH || hash === SOURCE_HASH;
+    const next = ours || this.previewOn ? wanted : hash;
+    if (next === hash || this.viewMode !== 'presenting') return;
+    this.navigation.replacePath(window.location.pathname + next, this.navigation.currentState());
+  }
+
   private syncChrome(): void {
     this.palette.setMode(this.viewMode);
     this.palette.setSaveEnabled(this.canSave());
@@ -682,6 +839,14 @@ export class AppController {
     if (this.lockNext) spoken += ', protected with a passphrase';
     const icon = this.lockNext ? 'lock' : this.burnNext ? 'burn' : this.lifetime ? 'clock' : null;
     this.palette.setSaveLabel(spoken, icon);
+    const mode = this.previewMode();
+    this.palette.setPreviewChip({
+      available: mode !== null,
+      on: mode !== null && this.previewOn,
+      busy: this.previewBusy,
+      label: mode?.label ?? '',
+      icon: mode?.icon,
+    });
   }
 
   /** Zoom the editor and flash the new font size. */
@@ -720,6 +885,8 @@ export class AppController {
         this.syncChrome();
         this.notify.toast('Passphrase protection off', 'info', { brief: true });
         return;
+      case 'preview':
+        return this.togglePreview();
       case 'copy-passphrase':
         return this.copyPassphrase();
       case 'burn':
@@ -807,6 +974,8 @@ export class AppController {
       this.recordRecent(this.document.key, path);
     }
     this.view.renderFullState(this.document, 'presenting', result.highlighted);
+    // Another language may have no preview mode (or gain one).
+    void this.applyPreview();
     this.syncChrome();
   }
 

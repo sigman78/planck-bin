@@ -127,6 +127,18 @@ describe('availableCommands', () => {
     expect(hints(false).about).toBeUndefined();
   });
 
+  it('offers the preview toggle only for a presented paste with a preview mode', () => {
+    const preview = { label: 'Preview markdown', on: false };
+    const find = (ctx: Partial<CommandContext>) =>
+      availableCommands({ ...base, ...ctx }).find((c) => c.id === 'preview');
+    expect(find({})).toBeUndefined();
+    expect(find({ preview, mode: 'editing' })).toBeUndefined();
+    expect(find({ preview })!.label).toBe('Preview markdown');
+    expect(find({ preview: { ...preview, on: true } })!.label).toBe('Exit preview');
+    expect(shortcutCommand(altShift('KeyV'), { ...base, preview })).toBe('preview');
+    expect(shortcutCommand(altShift('KeyV'), base)).toBeNull();
+  });
+
   it('marks prefill and submenu commands', () => {
     const all = availableCommands(base);
     expect(all.find((c) => c.id === 'goto-line')!.prefill).toBe(':');

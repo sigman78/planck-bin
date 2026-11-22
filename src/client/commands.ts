@@ -46,6 +46,8 @@ export interface CommandContext {
   lockNext?: boolean;
   /** The passphrase of the paste on screen is known here (its creator, this tab). */
   hasPassphrase?: boolean;
+  /** A preview mode can present the paste on screen: its label, and whether it is on. */
+  preview?: { label: string; on: boolean };
 }
 
 /**
@@ -151,6 +153,13 @@ const COMMANDS: CommandDef[] = [
     // /raw reads a burn paste: it would destroy the creator's link, or 404 once burned.
     // A protected one has no readable form on the server.
     available: (ctx) => presenting(ctx) && !ctx.frozen && ctx.hasKey && !ctx.burn && !ctx.lock,
+  },
+  {
+    id: 'preview',
+    label: (ctx) => (ctx.preview?.on ? 'Exit preview' : (ctx.preview?.label ?? 'Preview')),
+    keywords: ['preview', 'render', 'formatted', 'markdown', 'source', 'view'],
+    key: { code: 'KeyV', label: 'V' },
+    available: (ctx) => presenting(ctx) && !gated(ctx) && ctx.preview !== undefined,
   },
   {
     id: 'find',

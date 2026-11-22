@@ -31,6 +31,13 @@ describe('renderDocumentPage', () => {
     expect(render({ key: 'k', content: 'x' })).not.toBeNull();
   });
 
+  it('marks the viewer of a paste that opens in preview', () => {
+    const viewer = (key: string) =>
+      parse(render({ key, content: '# x' }, `${key}.md`)!).getElementById('viewer')!;
+    expect(viewer('about').hasAttribute('data-preview-default')).toBe(true);
+    expect(viewer('tavelu-hasoq').hasAttribute('data-preview-default')).toBe(false);
+  });
+
   it('round-trips hostile content exactly through the embedded JSON', () => {
     const doc: GetResponse = {
       key: 'tavelu-hasoq',
@@ -44,8 +51,8 @@ describe('renderDocumentPage', () => {
     const data = dom.getElementById(EMBEDDED_DOCUMENT_ID)!;
     expect(data.getAttribute('type')).toBe('application/json');
     expect(JSON.parse(data.textContent!)).toEqual(doc);
-    // Nothing escaped the data element: only the shell's module script plus ours.
-    expect(scripts).toHaveLength(2);
+    // Nothing escaped the data element: only the shell's boot and module scripts plus ours.
+    expect(scripts).toHaveLength(3);
   });
 
   it('paints the text into the visible viewer (CR normalized by the parser)', () => {
