@@ -199,13 +199,15 @@ export class AppController {
     this.view.init();
     this.palette.init();
     this.initHints();
-    // A hand-edited or pasted link: #preview turns it on, #source or a #L line anchor off.
+    // A hand-edited or pasted link: #preview turns it on, #source or a #L line
+    // anchor off, and no hash means the paste's default view.
     window.addEventListener('hashchange', () => {
       const hash = window.location.hash;
-      if (hash === PREVIEW_HASH && !this.previewOn) this.setPreviewOn(true);
-      else if ((hash === SOURCE_HASH || hash.startsWith('#L')) && this.previewOn) {
-        this.setPreviewOn(false);
-      }
+      let want: boolean | null = null;
+      if (hash === PREVIEW_HASH) want = true;
+      else if (hash === SOURCE_HASH || hash.startsWith('#L')) want = false;
+      else if (hash === '') want = this.previewByDefault();
+      if (want !== null && want !== this.previewOn) this.setPreviewOn(want);
     });
     // Keep the entry's remembered position current, so a reload returns to where
     // the page was, not to one captured at the last navigation (scroll
@@ -992,7 +994,9 @@ export class AppController {
   }
 
   private captureScrollInHistory(): void {
-    this.navigation.captureScroll(window.location.pathname);
+    // Keep the hash: Back must return to the same view (#preview, #L line).
+    const { pathname, search, hash } = window.location;
+    this.navigation.captureScroll(pathname + search + hash);
   }
 
   /**

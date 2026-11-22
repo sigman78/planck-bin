@@ -161,6 +161,38 @@ test.describe('Markdown preview', () => {
     await expect(page.locator(S.viewer)).toBeHidden();
   });
 
+  test('clearing the hash returns to the default view', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('abc', DOC);
+    store.setFrozen('about', '# About this pastebin');
+
+    await page.goto('/abc.md#preview');
+    await expect(page.locator(`${PREVIEW} h1`)).toBeVisible();
+    await page.evaluate(() => (window.location.hash = ''));
+    await expect(page.locator(S.viewer)).toBeVisible();
+    await expect(page.locator(PREVIEW)).toBeHidden();
+
+    await page.goto('/about.md#source');
+    await expect(page.locator(S.viewer)).toBeVisible();
+    await page.evaluate(() => (window.location.hash = ''));
+    await expect(page.locator(`${PREVIEW} h1`)).toBeVisible();
+  });
+
+  test('Back returns to the preview', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('abc', DOC);
+    await page.goto('/abc.md');
+    await page.locator(CHIP).click();
+    await expect(page.locator(`${PREVIEW} h1`)).toBeVisible();
+
+    await runCommand(page, 'New paste');
+    await expect(page.locator(S.editor)).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/abc\.md#preview$/);
+    await expect(page.locator(`${PREVIEW} h1`)).toHaveText('Notes');
+    await expect(page.locator(S.viewer)).toBeHidden();
+  });
+
   test('raw HTML in the paste stays text', async ({ page }) => {
     const store = await setupMockApi(page);
     store.set('abc', '<img src=x onerror="window.pwned=1"> <script>window.pwned=1</script>');

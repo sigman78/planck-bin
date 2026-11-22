@@ -32,24 +32,29 @@ md.core.ruler.push('align_classes', (state) => {
   }
 });
 
+// Images inside a link (a badge, say): marked in one pass over each inline
+// run, so the renderer need not rescan the tokens before every image.
+md.core.ruler.push('images_in_links', (state) => {
+  for (const block of state.tokens) {
+    if (block.type !== 'inline' || !block.children) continue;
+    let depth = 0;
+    for (const token of block.children) {
+      if (token.type === 'link_open') depth++;
+      else if (token.type === 'link_close') depth--;
+      else if (token.type === 'image' && depth > 0) token.meta = { ...token.meta, inLink: true };
+    }
+  }
+});
+
 md.renderer.rules.image = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const src = String(token.attrGet('src') ?? '');
   const alt = self.renderInlineAsText(token.children ?? [], options, env);
   const { escapeHtml } = md.utils;
-  // Inside a link (a badge, say) the outer link wins; anchors cannot nest.
-  if (insideLink(tokens, idx)) return `<span class="md-image">${escapeHtml(alt || src)}</span>`;
+  // Inside a link the outer link wins; anchors cannot nest.
+  if (token.meta?.inLink) return `<span class="md-image">${escapeHtml(alt || src)}</span>`;
   return `<a class="md-image" href="${escapeHtml(src)}">${escapeHtml(alt || src)}</a>`;
 };
-
-function insideLink(tokens: { type: string }[], idx: number): boolean {
-  let depth = 0;
-  for (let i = 0; i < idx; i++) {
-    if (tokens[i].type === 'link_open') depth++;
-    else if (tokens[i].type === 'link_close') depth--;
-  }
-  return depth > 0;
-}
 
 export const markdownRenderer: PreviewRenderer = {
   render: (content) => md.render(content),
