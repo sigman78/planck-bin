@@ -1,37 +1,6 @@
 :root {
-    /* background layers (darkest to lightest) */
-    --color-bg:          #002b36;   /* page/body background (solarized base03) */
-    --color-key-bg:      #00222b;   /* drop overlay plaque */
+    /* Colors live in tokens.css. */
 
-    /* content colors */
-    --color-editor-text: #93a1a1;   /* editor text (solarized base1) */
-    --color-placeholder: #586e75;   /* editor placeholder (solarized base01) */
-    --color-icon:        #c4dce3;   /* island mark and keycap */
-    --color-accent:      #d33682;   /* progress bar, save chip, focus rings (solarized magenta) */
-    --color-logo:        #fdf6e3;   /* logo fill (solarized base3) */
-    --color-preview-on:  #2aa198;   /* preview chip while on (solarized cyan) */
-    --color-focus-muted: #2b5c68;   /* quiet focus ring: viewer (its left edge runs along the gutter) and gutter links */
-
-    /* ui / overlay colors */
-    --color-toast-bg:    rgba(0, 22, 28, 0.96);   /* toast background (island panel tone) */
-    --color-toast-error-bg: #a31515;              /* error toast background */
-    --color-toast-edge:  rgba(255, 255, 255, 0.1); /* toast hairline outline */
-    --color-text-bright: #fff;      /* toast text, tooltip label */
-    --color-line-highlight: rgba(255, 255, 255, 0.03); /* current line highlight */
-    --color-selection:   #114955;   /* solid selection background with stronger contrast */
-    --color-find:        rgba(181, 137, 0, 0.35);  /* find matches (solarized yellow) */
-    --color-find-current: rgba(211, 54, 130, 0.55); /* current find match */
-
-    /* island (command palette) */
-    --color-island-bg:       rgba(12, 58, 69, 0.96);
-    --color-island-bg-hover: rgba(17, 68, 80, 0.98);
-    --color-island-panel:    #00161c;
-    --color-island-edge:     rgba(255, 255, 255, 0.06);
-    --color-island-chip:     rgba(255, 255, 255, 0.08);
-    --color-island-row-selected: rgba(211, 54, 130, 0.16);
-    --color-island-pulse:    rgba(211, 54, 130, 0.55);
-    --color-island-scroll:   rgba(255, 255, 255, 0.16);
-    --color-island-scroll-hover: rgba(255, 255, 255, 0.3);
     --island-spring: cubic-bezier(0.34, 1.25, 0.64, 1);
 
     /* typography */
@@ -90,7 +59,7 @@
     color: var(--color-text-bright);
     box-shadow:
         0 0 0 1px var(--color-toast-edge),
-        0 8px 24px rgba(0, 0, 0, 0.35);
+        0 8px 24px var(--color-shadow);
     font-family: var(--font-ui);
     font-size: 14px;
     line-height: 1.4;
@@ -112,8 +81,8 @@
 #toast.error {
     background: var(--color-toast-error-bg);
     box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.16),
-        0 8px 24px rgba(0, 0, 0, 0.35);
+        0 0 0 1px var(--color-toast-error-edge),
+        0 8px 24px var(--color-shadow);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -399,7 +368,7 @@ body {
     position: fixed;
     inset: 0;
     z-index: 1500;
-    background: rgba(0, 43, 54, 0.85);
+    background: var(--color-scrim);
     pointer-events: none;
     align-items: center;
     justify-content: center;
@@ -416,5 +385,5 @@ body {
     font-family: var(--font-ui);
     font-size: var(--font-size-editor);
     border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 2px 8px var(--shade-50);
 }

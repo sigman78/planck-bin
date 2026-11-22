@@ -83,7 +83,7 @@
     border-radius: 14px;
     background: var(--color-island-panel);
     box-shadow:
-        0 12px 36px rgba(0, 0, 0, 0.6),
+        0 12px 36px var(--color-island-shadow),
         0 0 0 1px var(--color-island-edge);
 }
 
@@ -209,7 +209,7 @@
 }
 
 .island-hint .island-preview:not(:disabled):hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--color-island-chip-hover);
     color: var(--color-logo);
 }
 

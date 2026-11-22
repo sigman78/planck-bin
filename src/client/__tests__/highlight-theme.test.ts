@@ -51,12 +51,12 @@ describe('HighlightTheme with the bundled Solarized theme', () => {
 
   it('applies plain token rules', () => {
     const p = painted(compile(css), 'const x = "hi"; // note\nfunction f(a) {}', 'javascript');
-    expect(p('const')).toBe('color: var(--sol-yellow);');
-    expect(p('"hi"')).toBe('color: var(--color-constant);');
+    expect(p('const')).toBe('color: var(--syntax-keyword);');
+    expect(p('"hi"')).toBe('color: var(--syntax-constant);');
     expect(p('// note')).toBe(
-      'color: var(--color-comment); background-color: var(--color-comment-bg);'
+      'color: var(--syntax-comment); background-color: var(--syntax-comment-bg);'
     );
-    expect(p('f')).toBe('color: var(--color-definition);');
+    expect(p('f')).toBe('color: var(--syntax-definition);');
     // .hljs-params has an empty rule: base text
     expect(p('a')).toBe('');
   });
@@ -64,14 +64,14 @@ describe('HighlightTheme with the bundled Solarized theme', () => {
   it('applies descendant rules by specificity', () => {
     const p = painted(compile(css), '#include <stdio.h>\nint main() {}', 'cpp');
     // .hljs-meta .hljs-keyword beats .hljs-keyword (so "#" and "include" merge)
-    expect(p('#include ')).toBe('color: var(--color-special);');
-    expect(p('<stdio.h>')).toBe('color: var(--color-constant);');
+    expect(p('#include ')).toBe('color: var(--syntax-special);');
+    expect(p('<stdio.h>')).toBe('color: var(--syntax-constant);');
   });
 
   it('does not match .diff (no such element), like the span renderer', () => {
     const p = painted(compile(css), '@@ -1 +1 @@\n-a\n+b', 'diff');
-    expect(p('@@ -1 +1 @@')).toBe('color: var(--color-special);');
-    expect(p('-a')).toBe('color: var(--color-deletion);');
+    expect(p('@@ -1 +1 @@')).toBe('color: var(--syntax-special);');
+    expect(p('-a')).toBe('color: var(--syntax-deletion);');
   });
 
   it('drops what ::highlight() cannot paint', () => {
