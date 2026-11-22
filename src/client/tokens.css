@@ -98,16 +98,44 @@
     --color-md-th-bg:      var(--light-4);
 
     /* --- syntax roles: tuned for code text -------------------------------- */
+    /* Hue comes from the Solarized primitive; lightness and chroma come from
+       the tiers below, picked for small text on base03. Retune here, not per
+       role. All results stay inside sRGB. Contrast vs base03 (WCAG ratio)
+       noted per role. */
+
+    /* lightness tiers (OKLCH L, 0-1) */
+    --syntax-l-bright: 0.84;  /* loudest accent */
+    --syntax-l-accent: 0.78;  /* default accent */
+    --syntax-l-warm:   0.71;  /* red/orange: lower L keeps them saturated in gamut */
+    --syntax-l-text:   0.758; /* body text */
+    --syntax-l-dim:    0.563; /* punctuation and comment plate, dim on purpose */
+
+    /* chroma tiers (OKLCH C) */
+    --syntax-c-calm:  0.115;  /* structural roles; ceiling set by blue, which
+                                 leaves sRGB above 0.120 at l-accent */
+    --syntax-c-vivid: 0.17;   /* rare, attention-worthy roles; ceiling set by
+                                 green and red (about 0.183) */
+
     --syntax-bg:          var(--color-bg);
-    --syntax-text:        var(--color-editor-text);
-    --syntax-punctuation: oklch(0.4600 0.0240 219.20); /* base01, dimmer */
-    --syntax-keyword:     oklch(0.7500 0.1400  85.72); /* yellow, brighter */
-    --syntax-constant:    oklch(0.7600 0.1200 187.42); /* cyan, brighter */
-    --syntax-definition:  oklch(0.7300 0.1500 244.94); /* blue, brighter */
+
+    /* neutrals: primitive chroma kept, lightness from tier */
+    --syntax-text:        oklch(from var(--sol-base1)  var(--syntax-l-text) c h); /* 7.0 */
+    --syntax-punctuation: oklch(from var(--sol-base01) var(--syntax-l-dim)  c h); /* 3.3 */
+
+    /* calm accents; keyword shares the definition tier, and yellow reads
+       slightly lower in contrast than blue there, keeping keywords just
+       below definitions */
+    --syntax-keyword:     oklch(from var(--sol-yellow) var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.5 */
+    --syntax-definition:  oklch(from var(--sol-blue)   var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.6 */
+    --syntax-constant:    oklch(from var(--sol-cyan)   var(--syntax-l-bright) var(--syntax-c-calm) h); /* 9.6 */
+
+    /* vivid accents; additions lifted a step so new lines stand out */
+    --syntax-special:     oklch(from var(--sol-orange) var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.5 */
+    --syntax-deletion:    oklch(from var(--sol-red)    var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.4 */
+    --syntax-addition:    oklch(from var(--sol-green)  calc(var(--syntax-l-accent) + 0.02) var(--syntax-c-vivid) h); /* 8.3 */
+
+    /* comments: base03 text on the dim plate */
     --syntax-comment:     var(--sol-base03);
     --syntax-comment-bg:  var(--syntax-punctuation);
-    --syntax-special:     var(--sol-orange);
-    --syntax-deletion:    var(--sol-red);
-    --syntax-addition:    var(--sol-green);
     --syntax-diff:        var(--syntax-definition);
 }
