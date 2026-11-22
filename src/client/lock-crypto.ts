@@ -53,6 +53,21 @@ export function generatePassphrase(words: readonly string[], count = PASSPHRASE_
   return picked.join('-');
 }
 
+/** An edit of a suggested passphrase shorter than this is called out (not refused). */
+const HINT_MIN_WORDS = 3;
+const HINT_MIN_LENGTH = 16;
+
+/**
+ * Whether `value` is a cut-down version of the generated `suggestion`, worth
+ * a note: changed, and under three words or 16 characters. A cheap rule, not
+ * an entropy estimate; MIN_PASSPHRASE_LENGTH stays the hard floor.
+ */
+export function isWeakerThanSuggestion(value: string, suggestion: string): boolean {
+  const typed = normalizePassphrase(value);
+  if (typed === '' || typed === normalizePassphrase(suggestion)) return false;
+  return typed.split('-').length < HINT_MIN_WORDS || typed.length < HINT_MIN_LENGTH;
+}
+
 /** The EFF list, fetched only when a protected paste is created. */
 export async function loadWordlist(): Promise<string[]> {
   const { EFF_LARGE_WORDLIST } = await import('./eff-wordlist');

@@ -46,7 +46,16 @@ export interface PromptOptions {
   /** Shown on its own line in a selectable monospace block (a generated passphrase). */
   secret?: string;
   /** A one-line text field; Enter confirms with its value. */
-  input?: { label: string; placeholder?: string };
+  input?: {
+    label: string;
+    placeholder?: string;
+    /** Prefilled and selected, so typing replaces it and Enter accepts it. */
+    value?: string;
+    /** A one-line note under the field, recomputed on every edit ('' = none). */
+    hint?: (value: string) => string;
+  };
+  /** Room for a longer line (a four-word passphrase) than the default width. */
+  wide?: boolean;
   confirmLabel: string;
   /** Confirm label while busy (setPromptBusy). */
   busyLabel?: string;
@@ -80,6 +89,7 @@ export class CommandPalette {
   private readonly promptText: HTMLElement;
   private readonly promptSecret: HTMLElement;
   private readonly promptInput: HTMLInputElement;
+  private readonly promptHint: HTMLElement;
   private readonly promptConfirm: HTMLButtonElement;
   private readonly promptCancel: HTMLButtonElement;
   private promptOptions: PromptOptions | null = null;
@@ -113,6 +123,7 @@ export class CommandPalette {
     this.promptText = q('.island-prompt-text');
     this.promptSecret = q('.island-prompt-secret');
     this.promptInput = q('.island-prompt-input');
+    this.promptHint = q('.island-prompt-hint');
     this.promptConfirm = q('.island-prompt-confirm');
     this.promptCancel = q('.island-prompt-cancel');
   }
@@ -134,6 +145,7 @@ export class CommandPalette {
         this.promptOptions.cancel();
       }
     });
+    this.promptInput.addEventListener('input', () => this.updatePromptHint());
     this.prompt.addEventListener('animationend', () => this.prompt.classList.remove('rejected'));
 
     this.saveBtn.addEventListener('click', (evt) => {
@@ -238,8 +250,11 @@ export class CommandPalette {
     this.promptSecret.hidden = options.secret === undefined;
     this.promptSecret.textContent = options.secret ?? '';
     this.promptInput.hidden = options.input === undefined;
-    this.promptInput.value = '';
+    this.promptInput.value = options.input?.value ?? '';
     this.promptInput.placeholder = options.input?.placeholder ?? '';
+    this.promptHint.hidden = options.input?.hint === undefined;
+    this.updatePromptHint();
+    this.prompt.classList.toggle('wide', options.wide === true);
     if (options.input) this.promptInput.setAttribute('aria-label', options.input.label);
     this.promptCancel.textContent = options.cancelLabel;
     this.setPromptBusy(false);
@@ -271,8 +286,18 @@ export class CommandPalette {
   }
 
   private focusPrompt(): void {
-    const target = this.promptInput.hidden ? this.promptConfirm : this.promptInput;
-    target.focus({ preventScroll: true });
+    if (this.promptInput.hidden) {
+      this.promptConfirm.focus({ preventScroll: true });
+      return;
+    }
+    this.promptInput.focus({ preventScroll: true });
+    this.promptInput.select();
+  }
+
+  /** The hint line keeps its height when empty, so the prompt never changes size. */
+  private updatePromptHint(): void {
+    const hint = this.promptOptions?.input?.hint;
+    this.promptHint.textContent = hint ? hint(this.promptInput.value) : '';
   }
 
   /** Fold the question back into the pill. */

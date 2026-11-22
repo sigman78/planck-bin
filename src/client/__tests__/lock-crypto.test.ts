@@ -2,6 +2,7 @@
 
 import {
   generatePassphrase,
+  isWeakerThanSuggestion,
   loadWordlist,
   lockContent,
   normalizePassphrase,
@@ -48,6 +49,27 @@ describe('generatePassphrase', () => {
     const seen = new Set<string>();
     for (let i = 0; i < 200; i++) seen.add(generatePassphrase(['a', 'b', 'c'], 1));
     expect(seen).toEqual(new Set(['a', 'b', 'c']));
+  });
+});
+
+describe('isWeakerThanSuggestion', () => {
+  const suggestion = 'maple-orbit-quiet-lantern';
+
+  it('is quiet for the suggestion itself, in any spelling, and for an empty field', () => {
+    expect(isWeakerThanSuggestion(suggestion, suggestion)).toBe(false);
+    expect(isWeakerThanSuggestion('Maple Orbit Quiet Lantern', suggestion)).toBe(false);
+    expect(isWeakerThanSuggestion('', suggestion)).toBe(false);
+  });
+
+  it('flags edits under three words or 16 characters', () => {
+    expect(isWeakerThanSuggestion('maple-orbit', suggestion)).toBe(true);
+    expect(isWeakerThanSuggestion('averyveryverylongword', suggestion)).toBe(true);
+    expect(isWeakerThanSuggestion('a-b-c', suggestion)).toBe(true);
+  });
+
+  it('accepts edits that keep three words and 16 characters', () => {
+    expect(isWeakerThanSuggestion('maple orbit quiet', suggestion)).toBe(false);
+    expect(isWeakerThanSuggestion('open sesame please', suggestion)).toBe(false);
   });
 });
 

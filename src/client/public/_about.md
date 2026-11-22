@@ -24,7 +24,7 @@ press Enter.
 - **Recent pastes** - pastes you saved or opened in this browser (stored only locally)
 - **Expires** - how long new pastes are kept (while editing)
 - **Burn after reading** - make the next paste readable only once (while editing)
-- **Protect with passphrase** / **Set own passphrase** - encrypt the next paste (while editing)
+- **Protect with passphrase** - encrypt the next paste (while editing)
 - **Copy passphrase** - copy the passphrase of a protected paste you just saved
 
 ## Keyboard Shortcuts
@@ -65,9 +65,9 @@ it through `/raw/` or the API deletes it right away.
 
 ## Protected Pastes
 
-Turn on **Protect with passphrase** before saving to encrypt the paste in your browser. You get a
-four-word passphrase once, right after saving; send it separately from the link. **Set own
-passphrase** lets you pick one instead. Whoever opens the link has to enter it; case and the
+Run **Protect with passphrase** before saving to encrypt the paste in your browser. It proposes a
+four-word passphrase: press Enter to use it, or type your own. After saving it is shown once
+more to copy; send it separately from the link. Whoever opens the link has to enter it; case and the
 separators between words do not matter. After 10 wrong passphrases the paste is deleted. Lost
 passphrases cannot be recovered: the server never sees them.
 

@@ -42,8 +42,8 @@ export interface CommandContext {
   lifetimeLabel?: string;
   /** The paste on screen is protected: behind the passphrase gate, or opened. */
   lock?: 'pending' | 'open';
-  /** The next save is protected: with a generated passphrase, or the user's own. */
-  lockNext?: 'generated' | 'own';
+  /** The next save is protected with a passphrase. */
+  lockNext?: boolean;
   /** The passphrase of the paste on screen is known here (its creator, this tab). */
   hasPassphrase?: boolean;
 }
@@ -111,15 +111,8 @@ const COMMANDS: CommandDef[] = [
   {
     id: 'lock',
     label: (ctx) => (ctx.lockNext ? "Don't protect with passphrase" : 'Protect with passphrase'),
-    keywords: ['password', 'passphrase', 'encrypt', 'private', 'secret', 'lock'],
+    keywords: ['password', 'passphrase', 'encrypt', 'private', 'secret', 'lock', 'own', 'custom'],
     icon: (ctx) => (ctx.lockNext ? 'lock' : undefined),
-    available: editing,
-  },
-  {
-    id: 'lock-own',
-    label: 'Set own passphrase',
-    keywords: ['password', 'passphrase', 'encrypt', 'private', 'custom'],
-    hint: (_, ctx) => (ctx.lockNext === 'own' ? 'set' : ''),
     available: editing,
   },
   {

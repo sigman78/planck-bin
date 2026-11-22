@@ -25,6 +25,7 @@ import { BurnPendingError, LockedError, UnlockRejectedError } from './storage';
 import {
   MIN_PASSPHRASE_LENGTH,
   generatePassphrase,
+  isWeakerThanSuggestion,
   loadWordlist,
   normalizePassphrase,
 } from './lock-crypto';
@@ -49,9 +50,6 @@ const CLEAR_RECENT_ID = '/clear';
 const DEFAULT_LIFETIME_ID = 'default';
 /** Recent-list preview of a protected paste: its text never goes to localStorage. */
 const LOCKED_PREVIEW = 'Protected paste';
-
-/** The next save's protection: a generated passphrase, or the user's own. */
-type LockChoice = { kind: 'generated' } | { kind: 'own'; passphrase: string };
 
 /** A protected paste behind the passphrase gate. */
 interface PendingLock {
@@ -91,8 +89,8 @@ export class AppController {
   private burnNext = false;
   /** The unread burn paste behind the reveal gate. */
   private pendingBurn: ParsedPath | null = null;
-  /** The next save is protected; resets after each save. */
-  private lockNext: LockChoice | null = null;
+  /** Passphrase (normalized) the next save is protected with; resets after each save. */
+  private lockNext: string | null = null;
   /** The protected paste behind the passphrase gate. */
   private pendingLock: PendingLock | null = null;
   /** Passphrases of protected pastes saved in this tab, for "Copy passphrase". Memory only. */
@@ -139,7 +137,7 @@ export class AppController {
         burnNext: this.burnNext,
         lifetimeLabel: this.lifetime ? LIFETIME_LABELS[this.lifetime] : 'default',
         lock: this.document.locked ? (this.pendingLock ? 'pending' : 'open') : undefined,
-        lockNext: this.lockNext?.kind,
+        lockNext: this.lockNext !== null,
         hasPassphrase: this.document.key !== undefined && this.passphrases.has(this.document.key),
       }),
       run: (id) => this.runCommand(id),
@@ -248,12 +246,7 @@ export class AppController {
       this.activity = 'saving';
       this.notify.progressStart();
 
-      const lock = this.lockNext;
-      const passphrase = !lock
-        ? undefined
-        : lock.kind === 'own'
-          ? lock.passphrase
-          : generatePassphrase(await loadWordlist());
+      const passphrase = this.lockNext ?? undefined;
       const result = await this.session.save(this.document.content, {
         expires: this.lifetime ?? undefined,
         burn: this.burnNext,
@@ -267,11 +260,9 @@ export class AppController {
       if (passphrase !== undefined) this.passphrases.set(result.paste.key, passphrase);
       // A burn paste is one-shot: no preview of it is kept in localStorage.
       if (!burn) this.recordRecent(result.paste.key, result.canonicalPath);
-      if (burn && !lock) this.notify.toast('Burn link ready: it can be opened once');
-      if (lock?.kind === 'own') {
-        this.notify.toast(
-          burn ? 'Protected burn link ready: it can be opened once' : 'Protected link ready'
-        );
+      // A protected save says so in its passphrase prompt instead.
+      if (burn && passphrase === undefined) {
+        this.notify.toast('Burn link ready: it can be opened once');
       }
 
       this.activity = 'idle';
@@ -285,7 +276,7 @@ export class AppController {
         highlighted: result.highlighted,
         scrollY: this.scrollToTopOnSave ? 0 : null,
       });
-      if (lock?.kind === 'generated') this.showPassphrase(passphrase!, burn);
+      if (passphrase !== undefined) this.showPassphrase(passphrase, burn);
     } catch (err) {
       console.error('Save failed:', err);
 
@@ -500,7 +491,7 @@ export class AppController {
     }
   }
 
-  /** Right after saving with a generated passphrase: show it once, offer to copy it. */
+  /** Right after a protected save: show the passphrase as set, offer to copy it. */
   private showPassphrase(passphrase: string, burn: boolean): void {
     this.palette.showPrompt({
       title: 'Passphrase',
@@ -508,6 +499,7 @@ export class AppController {
         ? 'The link opens once, with this passphrase. Send them separately.'
         : 'The link opens with this passphrase. Send them separately.',
       secret: passphrase,
+      wide: true,
       confirmLabel: 'Copy passphrase',
       cancelLabel: 'Done',
       dismissible: true,
@@ -519,14 +511,34 @@ export class AppController {
     });
   }
 
-  /** Ask for the user's own passphrase for the next save. */
-  private askOwnPassphrase(): void {
+  /**
+   * Pick the next save's passphrase: a generated one, prefilled and selected,
+   * to accept with Enter, edit, or replace by typing.
+   */
+  private async askPassphrase(): Promise<void> {
+    let suggestion = '';
+    try {
+      suggestion = generatePassphrase(await loadWordlist());
+    } catch (err) {
+      // Offline before the list was ever loaded: the user can still type one.
+      console.error('Wordlist failed to load:', err);
+    }
+    if (this.viewMode !== 'editing' || this.isBusy) return;
     this.palette.showPrompt({
-      title: 'Own passphrase',
+      title: 'Passphrase',
       text:
-        `At least ${MIN_PASSPHRASE_LENGTH} characters; longer is stronger. ` +
+        `Use this one or type your own: at least ${MIN_PASSPHRASE_LENGTH} characters. ` +
         'Case, spaces and dashes do not matter.',
-      input: { label: 'Passphrase', placeholder: 'passphrase' },
+      input: {
+        label: 'Passphrase',
+        placeholder: 'passphrase',
+        value: suggestion,
+        hint: (value) =>
+          suggestion && isWeakerThanSuggestion(value, suggestion)
+            ? 'Shorter than the suggestion: easier to guess'
+            : '',
+      },
+      wide: true,
       confirmLabel: 'Use',
       cancelLabel: 'Cancel',
       dismissible: true,
@@ -536,10 +548,10 @@ export class AppController {
           this.notify.toast(`Use at least ${MIN_PASSPHRASE_LENGTH} characters`, 'error');
           return;
         }
-        this.lockNext = { kind: 'own', passphrase: value };
+        this.lockNext = normalizePassphrase(value);
         this.closeQuestion();
         this.syncChrome();
-        this.notify.toast('Next save is protected with your passphrase', 'info', { brief: true });
+        this.notify.toast('Next save is protected', 'info', { brief: true });
       },
       cancel: () => this.closeQuestion(),
     });
@@ -703,16 +715,11 @@ export class AppController {
       case 'about':
         return this.openPath('/about.md');
       case 'lock':
-        this.lockNext = this.lockNext ? null : { kind: 'generated' };
+        if (this.lockNext === null) return void this.askPassphrase();
+        this.lockNext = null;
         this.syncChrome();
-        this.notify.toast(
-          this.lockNext ? 'Next save gets a passphrase' : 'Passphrase protection off',
-          'info',
-          { brief: true }
-        );
+        this.notify.toast('Passphrase protection off', 'info', { brief: true });
         return;
-      case 'lock-own':
-        return this.askOwnPassphrase();
       case 'copy-passphrase':
         return this.copyPassphrase();
       case 'burn':

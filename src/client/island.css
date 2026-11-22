@@ -273,6 +273,11 @@
         transform 0.3s var(--island-spring);
 }
 
+/* Fits the longest four-word passphrase (39 characters) on one line. */
+.island-prompt.wide {
+    width: min(380px, calc(100vw - 24px));
+}
+
 #island.prompting .island-prompt {
     opacity: 1;
     transform: none;
@@ -327,8 +332,18 @@
     caret-color: var(--color-accent);
 }
 
+/* Under the field; keeps one line of height when empty so the prompt never resizes. */
+.island-prompt-hint {
+    min-height: 1.45em;
+    margin-top: 6px !important;
+    color: var(--color-placeholder);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
 .island-prompt-input[hidden],
-.island-prompt-secret[hidden] {
+.island-prompt-secret[hidden],
+.island-prompt-hint[hidden] {
     display: none;
 }
 

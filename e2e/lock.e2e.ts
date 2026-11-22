@@ -9,6 +9,9 @@ const SECRET = `${PROMPT} .island-prompt-secret`;
 const FIELD = `${PROMPT} .island-prompt-input`;
 const CONFIRM = `${PROMPT} .island-prompt-confirm`;
 const CANCEL = `${PROMPT} .island-prompt-cancel`;
+const HINT = `${PROMPT} .island-prompt-hint`;
+const LOCK_ICON = `${S.saveBtn} svg[data-icon="lock"]`;
+const WORDS = /^[a-z]+(-[a-z]+){3,}$/;
 const TEXT = 'const answer = 42;';
 
 async function typePaste(page: Page, text = TEXT) {
@@ -23,11 +26,19 @@ async function save(page: Page, store: Awaited<ReturnType<typeof setupMockApi>>)
   return store.lastKey()!;
 }
 
+/** Run the command and replace the proposed passphrase with `passphrase`. */
 async function setOwnPassphrase(page: Page, passphrase: string) {
-  await runCommand(page, 'Set own passphrase');
+  await runCommand(page, 'Protect with passphrase');
   await expect(page.locator(FIELD)).toBeFocused();
   await page.locator(FIELD).fill(passphrase);
   await page.keyboard.press('Enter');
+  await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
+}
+
+/** Dismiss the passphrase shown after a protected save. */
+async function closeSavedPassphrase(page: Page) {
+  await expect(page.locator(TITLE)).toHaveText('Passphrase');
+  await page.locator(CANCEL).click(); // Done
   await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
 }
 
@@ -36,12 +47,22 @@ test.describe('protected pastes', () => {
     const store = await setupMockApi(page);
     await typePaste(page);
     await runCommand(page, 'Protect with passphrase');
-    await expect(page.locator(`${S.saveBtn} svg[data-icon="lock"]`)).toHaveCount(1);
+
+    // The proposal is prefilled and selected: Enter takes it as is.
+    await expect(page.locator(FIELD)).toBeFocused();
+    const passphrase = await page.locator(FIELD).inputValue();
+    expect(passphrase).toMatch(WORDS);
+    const selected = await page
+      .locator(FIELD)
+      .evaluate((el: HTMLInputElement) => el.selectionEnd! - el.selectionStart!);
+    expect(selected).toBe(passphrase.length);
+    await expect(page.locator(HINT)).toHaveText('');
+    await page.keyboard.press('Enter');
+    await expect(page.locator(LOCK_ICON)).toHaveCount(1);
 
     const key = await save(page, store);
     await expect(page.locator(TITLE)).toHaveText('Passphrase');
-    const passphrase = (await page.locator(SECRET).textContent()) ?? '';
-    expect(passphrase).toMatch(/^[a-z]+(-[a-z]+){3,}$/);
+    await expect(page.locator(SECRET)).toHaveText(passphrase);
 
     // The server only ever sees ciphertext.
     expect(store.isLocked(key)).toBe(true);
@@ -82,22 +103,32 @@ test.describe('protected pastes', () => {
     const store = await setupMockApi(page);
     await typePaste(page);
 
-    // Escape dismisses the own-passphrase question; too short is refused.
-    await runCommand(page, 'Set own passphrase');
+    // Escape leaves protection off.
+    await runCommand(page, 'Protect with passphrase');
     await page.keyboard.press('Escape');
     await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
-    await runCommand(page, 'Set own passphrase');
+    await expect(page.locator(LOCK_ICON)).toHaveCount(0);
+
+    // Too short is refused; a cut-down suggestion gets a note, a fair own one does not.
+    await runCommand(page, 'Protect with passphrase');
     await page.locator(FIELD).fill('short');
     await page.keyboard.press('Enter');
     await expect(page.locator(S.toast)).toContainText('at least 8 characters');
     await expect(page.locator(S.island)).toHaveClass(/prompting/);
-    await page.locator(CANCEL).click();
+    await page.locator(FIELD).fill('two words');
+    await expect(page.locator(HINT)).toHaveText('Shorter than the suggestion: easier to guess');
+    await page.locator(FIELD).fill('Open Sesame Please');
+    await expect(page.locator(HINT)).toHaveText('');
+    await page.keyboard.press('Enter');
+    await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
+    await expect(page.locator(LOCK_ICON)).toHaveCount(1);
 
-    await setOwnPassphrase(page, 'open sesame please');
     await runCommand(page, 'Burn after reading');
     const key = await save(page, store);
-    await expect(page.locator(S.toast)).toContainText('Protected burn link ready');
-    await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
+    // Own passphrases are shown after saving too, as set: a typo would show here.
+    await expect(page.locator(SECRET)).toHaveText('open-sesame-please');
+    await expect(page.locator(`${PROMPT} .island-prompt-text`)).toContainText('opens once');
+    await closeSavedPassphrase(page);
 
     await page.goto(`/${key}`);
     await expect(page.locator(`${PROMPT} .island-prompt-text`)).toContainText('deletes it');
@@ -117,6 +148,7 @@ test.describe('protected pastes', () => {
     await typePaste(page);
     await setOwnPassphrase(page, 'correct horse battery');
     const key = await save(page, store);
+    await closeSavedPassphrase(page);
 
     await page.goto(`/${key}`);
     for (let left = 9; left >= 1; left--) {
@@ -140,6 +172,7 @@ test.describe('protected pastes', () => {
     await typePaste(page);
     await setOwnPassphrase(page, 'correct horse battery');
     const key = await save(page, store);
+    await closeSavedPassphrase(page);
 
     await page.goto(`/${key}`);
     await page.locator(FIELD).fill('wrong guess');
