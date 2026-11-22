@@ -150,14 +150,14 @@ the Save chip: a clock for a lifetime, a flame for burn (the flame wins when bot
 details are in its tooltip. Burn pastes are not added to the recent list.
 
 **Protect with passphrase** makes the next save a protected paste. It proposes a generated
-passphrase, four words from the [EFF long wordlist](https://www.eff.org/dice) (about 52 bits),
-in an editable field: Enter accepts it, or type your own (at least 8 characters; a note appears
-when an edit makes it shorter than three words or 16 characters). The Save chip then shows a
-lock; running the command again turns protection off. After saving, the passphrase is shown once
-as it was set, with a copy button. Opening the link asks for it; case and the separators between
-words (spaces, dashes, dots) do not matter. **Copy passphrase** stays available in the tab that
-created the paste. Protected pastes appear in the recent list as
-"Protected paste", without their text.
+passphrase, four words from the [EFF long wordlist](https://www.eff.org/dice) (about 52 bits), in
+an editable field: Enter accepts it, or type your own (at least 8 characters; a note appears under
+16 characters, or when the suggestion is cut to fewer than three of its words). The Save chip then
+shows a lock; running the command again turns protection off. After saving, the passphrase is shown
+once as it was set, with a copy button. Opening the link asks for it; case and the separators
+between words (spaces, dashes, dots) do not matter. **Copy passphrase** stays available in the tab
+that created the paste. Protected pastes appear in the recent list as "Protected paste", without
+their text.
 
 How it works: the browser derives a key from the passphrase with PBKDF2-SHA256 (600,000
 iterations, random salt) and splits it with HKDF into an AES-256-GCM content key and an unlock

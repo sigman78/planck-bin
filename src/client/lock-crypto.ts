@@ -53,19 +53,25 @@ export function generatePassphrase(words: readonly string[], count = PASSPHRASE_
   return picked.join('-');
 }
 
-/** An edit of a suggested passphrase shorter than this is called out (not refused). */
-const HINT_MIN_WORDS = 3;
+/** Passphrases below these are called out (not refused). */
 const HINT_MIN_LENGTH = 16;
+const HINT_MIN_WORDS = 3;
 
 /**
- * Whether `value` is a cut-down version of the generated `suggestion`, worth
- * a note: changed, and under three words or 16 characters. A cheap rule, not
- * an entropy estimate; MIN_PASSPHRASE_LENGTH stays the hard floor.
+ * Whether `value`, an edit of the generated `suggestion`, is worth a note:
+ * under 16 characters, or the suggestion cut down to fewer than three of its
+ * own words (each is one of 7776, so length says little about those). How
+ * the user separates their own words does not matter. A cheap rule, not an
+ * entropy estimate; MIN_PASSPHRASE_LENGTH stays the hard floor.
  */
 export function isWeakerThanSuggestion(value: string, suggestion: string): boolean {
   const typed = normalizePassphrase(value);
-  if (typed === '' || typed === normalizePassphrase(suggestion)) return false;
-  return typed.split('-').length < HINT_MIN_WORDS || typed.length < HINT_MIN_LENGTH;
+  const proposed = normalizePassphrase(suggestion);
+  if (typed === '' || typed === proposed) return false;
+  if (typed.length < HINT_MIN_LENGTH) return true;
+  const words = typed.split('-');
+  const suggested = new Set(proposed.split('-'));
+  return words.length < HINT_MIN_WORDS && words.every((word) => suggested.has(word));
 }
 
 /** The EFF list, fetched only when a protected paste is created. */

@@ -61,13 +61,21 @@ describe('isWeakerThanSuggestion', () => {
     expect(isWeakerThanSuggestion('', suggestion)).toBe(false);
   });
 
-  it('flags edits under three words or 16 characters', () => {
+  it('flags anything under 16 characters', () => {
     expect(isWeakerThanSuggestion('maple-orbit', suggestion)).toBe(true);
-    expect(isWeakerThanSuggestion('averyveryverylongword', suggestion)).toBe(true);
     expect(isWeakerThanSuggestion('a-b-c', suggestion)).toBe(true);
+    expect(isWeakerThanSuggestion('fifteenletters1', suggestion)).toBe(true);
   });
 
-  it('accepts edits that keep three words and 16 characters', () => {
+  it('flags the suggestion cut to fewer than three of its words, however long', () => {
+    const long = 'grandstand-overthrow-quiet-lantern';
+    expect(isWeakerThanSuggestion('grandstand overthrow', long)).toBe(true);
+    expect(isWeakerThanSuggestion('grandstand overthrow quiet', long)).toBe(false);
+  });
+
+  it('judges own passphrases by length, with or without separators', () => {
+    expect(isWeakerThanSuggestion('correcthorsebatterystaple', suggestion)).toBe(false);
+    expect(isWeakerThanSuggestion('averyveryverylongword', suggestion)).toBe(false);
     expect(isWeakerThanSuggestion('maple orbit quiet', suggestion)).toBe(false);
     expect(isWeakerThanSuggestion('open sesame please', suggestion)).toBe(false);
   });

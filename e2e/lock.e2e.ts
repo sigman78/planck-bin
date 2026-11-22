@@ -105,18 +105,24 @@ test.describe('protected pastes', () => {
 
     // Escape leaves protection off.
     await runCommand(page, 'Protect with passphrase');
+    // The prompt opens once the wordlist is loaded: wait for it before answering.
+    await expect(page.locator(FIELD)).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
     await expect(page.locator(LOCK_ICON)).toHaveCount(0);
 
     // Too short is refused; a cut-down suggestion gets a note, a fair own one does not.
     await runCommand(page, 'Protect with passphrase');
+    await expect(page.locator(FIELD)).toBeFocused();
     await page.locator(FIELD).fill('short');
     await page.keyboard.press('Enter');
     await expect(page.locator(S.toast)).toContainText('at least 8 characters');
     await expect(page.locator(S.island)).toHaveClass(/prompting/);
     await page.locator(FIELD).fill('two words');
     await expect(page.locator(HINT)).toHaveText('Shorter than the suggestion: easier to guess');
+    // One long run without separators is judged by its length.
+    await page.locator(FIELD).fill('correcthorsebatterystaple');
+    await expect(page.locator(HINT)).toHaveText('');
     await page.locator(FIELD).fill('Open Sesame Please');
     await expect(page.locator(HINT)).toHaveText('');
     await page.keyboard.press('Enter');
