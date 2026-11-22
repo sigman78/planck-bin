@@ -31,6 +31,39 @@ export interface SaveResponse {
   expiresAt?: string | null;
   /** Burn after reading: the first full read deletes the paste. */
   burn?: true;
+  /** Protected paste: readable only through POST /documents/:id/unlock. */
+  locked?: true;
+}
+
+/**
+ * Protected pastes are encrypted in the browser; the server never sees the
+ * passphrase. Both values are base64url: a 16-byte PBKDF2 salt and a 32-byte
+ * unlock token derived from the passphrase (the server keeps only its SHA-256).
+ * Sent as `lock` next to `content` in a JSON POST /documents body.
+ */
+export interface LockSpec {
+  salt: string;
+  token: string;
+}
+
+export const LOCK_SALT_PATTERN = /^[A-Za-z0-9_-]{22}$/;
+export const LOCK_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/** Wrong passphrases a protected paste survives; the last one deletes it. */
+export const UNLOCK_ATTEMPTS = 10;
+
+/** Body of POST /documents/:id/unlock. */
+export interface UnlockRequest {
+  token: string;
+}
+
+/**
+ * 403 (wrong passphrase, attempts left) or 410 (that was the last attempt,
+ * the paste is deleted) from POST /documents/:id/unlock.
+ */
+export interface UnlockRejected {
+  message: string;
+  attemptsLeft: number;
 }
 
 export interface GetResponse {
@@ -67,4 +100,16 @@ export interface BurnPending {
   burnPending: true;
 }
 
-export type EmbeddedPayload = GetResponse | EmbeddedNotFound | BurnPending;
+/**
+ * A protected paste: returned by GET /documents/:id and embedded by the page
+ * render, without content. The salt lets the client derive the unlock token.
+ */
+export interface LockedPending {
+  key: string;
+  locked: true;
+  salt: string;
+  /** Also burn after reading: a successful unlock deletes it. */
+  burn?: true;
+}
+
+export type EmbeddedPayload = GetResponse | EmbeddedNotFound | BurnPending | LockedPending;

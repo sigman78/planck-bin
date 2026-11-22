@@ -7,7 +7,9 @@ import {
   type Env,
   type KeyOptions,
   type KeyStrategy,
+  type LockedStub,
   type StoredDocument,
+  type UnlockCandidate,
 } from './types';
 import { capExpireDays, getServerConfig } from './config';
 
@@ -66,21 +68,24 @@ export class D1DocumentStore implements DocumentStore {
     private maxExpireDays: number = 0
   ) {}
 
-  // Burn documents never leave D1 through get/getWithin: CASE WHEN burn = 0
-  // keeps their content out of the result, and only take() reads it.
+  // Burn and protected documents never leave D1 through get/getWithin: the
+  // CASE WHEN keeps their content out of the result. Only take() reads a burn
+  // document, and only an unlock reads a protected one.
 
-  async get(key: string): Promise<StoredDocument | BurnPending | null> {
+  async get(key: string): Promise<StoredDocument | BurnPending | LockedStub | null> {
     const now = Math.floor(Date.now() / 1000);
 
     const row = await this.db
       .prepare(
-        `SELECT CASE WHEN burn = 0 THEN content END AS content, created_at, expires_at, burn
+        `SELECT CASE WHEN burn = 0 AND lock_salt IS NULL THEN content END AS content,
+           created_at, expires_at, burn, lock_salt
          FROM documents WHERE id = ? AND (expires_at IS NULL OR expires_at > ?)`
       )
       .bind(key, now)
       .first<DocumentRow>();
 
     if (!row) return null;
+    if (row.lock_salt) return lockedStub(row);
     if (row.burn) return BURN_PENDING;
     return fromRow(row);
   }
@@ -88,20 +93,22 @@ export class D1DocumentStore implements DocumentStore {
   async getWithin(
     key: string,
     maxChars: number
-  ): Promise<StoredDocument | BurnPending | 'too-large' | null> {
+  ): Promise<StoredDocument | BurnPending | LockedStub | 'too-large' | null> {
     const now = Math.floor(Date.now() / 1000);
 
     // content is NOT NULL, so a null here means it is over the limit.
     const row = await this.db
       .prepare(
-        `SELECT CASE WHEN burn = 0 AND LENGTH(content) <= ?3 THEN content END AS content,
-           created_at, expires_at, burn
+        `SELECT CASE WHEN burn = 0 AND lock_salt IS NULL AND LENGTH(content) <= ?3
+             THEN content END AS content,
+           created_at, expires_at, burn, lock_salt
          FROM documents WHERE id = ?1 AND (expires_at IS NULL OR expires_at > ?2)`
       )
       .bind(key, now, maxChars)
       .first<DocumentRow>();
 
     if (!row) return null;
+    if (row.lock_salt) return lockedStub(row);
     if (row.burn) return BURN_PENDING;
     if (row.content === null) return 'too-large';
     return fromRow(row);
@@ -114,13 +121,67 @@ export class D1DocumentStore implements DocumentStore {
     const row = await this.db
       .prepare(
         `DELETE FROM documents
-         WHERE id = ?1 AND burn = 1 AND (expires_at IS NULL OR expires_at > ?2)
+         WHERE id = ?1 AND burn = 1 AND lock_salt IS NULL
+           AND (expires_at IS NULL OR expires_at > ?2)
          RETURNING content, created_at, expires_at, burn`
       )
       .bind(key, now)
       .first<DocumentRow>();
 
     return row ? fromRow(row) : null;
+  }
+
+  async reserveUnlock(key: string, maxAttempts: number): Promise<UnlockCandidate | null> {
+    const now = Math.floor(Date.now() / 1000);
+
+    // Counting before checking makes the cap exact: N concurrent guesses
+    // spend N attempts, and the one that reaches the cap sees it.
+    const row = await this.db
+      .prepare(
+        `UPDATE documents SET lock_failures = lock_failures + 1
+         WHERE id = ?1 AND lock_salt IS NOT NULL AND lock_failures < ?3
+           AND (expires_at IS NULL OR expires_at > ?2)
+         RETURNING content, created_at, expires_at, burn, lock_verifier, lock_failures`
+      )
+      .bind(key, now, maxAttempts)
+      .first<DocumentRow & { lock_verifier: string; lock_failures: number }>();
+
+    if (!row) return null;
+    return {
+      ...fromRow(row),
+      verifier: row.lock_verifier,
+      burn: row.burn === 1,
+      failures: row.lock_failures,
+    };
+  }
+
+  async releaseUnlock(key: string): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE documents SET lock_failures = lock_failures - 1 WHERE id = ? AND lock_failures > 0'
+      )
+      .bind(key)
+      .run();
+  }
+
+  async takeLocked(key: string): Promise<StoredDocument | null> {
+    const now = Math.floor(Date.now() / 1000);
+
+    const row = await this.db
+      .prepare(
+        `DELETE FROM documents
+         WHERE id = ?1 AND burn = 1 AND lock_salt IS NOT NULL
+           AND (expires_at IS NULL OR expires_at > ?2)
+         RETURNING content, created_at, expires_at, burn`
+      )
+      .bind(key, now)
+      .first<DocumentRow>();
+
+    return row ? fromRow(row) : null;
+  }
+
+  async remove(key: string): Promise<void> {
+    await this.db.prepare('DELETE FROM documents WHERE id = ?').bind(key).run();
   }
 
   async incrementViews(key: string): Promise<void> {
@@ -143,11 +204,20 @@ export class D1DocumentStore implements DocumentStore {
       const key = generateKey(keyOptions.strategy, keyOptions.length);
       const result = await this.db
         .prepare(
-          `INSERT INTO documents (id, content, created_at, expires_at, views, burn)
-           VALUES (?, ?, ?, ?, 0, ?)
+          `INSERT INTO documents
+             (id, content, created_at, expires_at, views, burn, lock_salt, lock_verifier)
+           VALUES (?, ?, ?, ?, 0, ?, ?, ?)
            ON CONFLICT(id) DO NOTHING`
         )
-        .bind(key, content, now, expiresAt, options.burn ? 1 : 0)
+        .bind(
+          key,
+          content,
+          now,
+          expiresAt,
+          options.burn ? 1 : 0,
+          options.lock?.salt ?? null,
+          options.lock?.verifier ?? null
+        )
         .run();
 
       if (result.meta.changes > 0) {
@@ -192,6 +262,11 @@ interface DocumentRow {
   created_at: number;
   expires_at: number | null;
   burn: number;
+  lock_salt?: string | null;
+}
+
+function lockedStub(row: DocumentRow & { lock_salt?: string | null }): LockedStub {
+  return { locked: true, salt: row.lock_salt!, burn: row.burn === 1 };
 }
 
 function fromRow(row: DocumentRow): StoredDocument {

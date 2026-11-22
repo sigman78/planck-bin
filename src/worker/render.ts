@@ -16,7 +16,12 @@
  * caller serves the plain shell, which is the old client-rendered path.
  */
 
-import { EMBEDDED_DOCUMENT_ID, type EmbeddedPayload, type GetResponse } from '../shared/types';
+import {
+  EMBEDDED_DOCUMENT_ID,
+  type EmbeddedPayload,
+  type GetResponse,
+  type LockedPending,
+} from '../shared/types';
 
 /** The empty viewer as it appears in the built shell (src/client/index.html). */
 const VIEWER_A11Y = 'tabindex="0" role="region" aria-label="Paste content"';
@@ -71,6 +76,11 @@ export function renderNotFoundPage(shell: string, key: string): string | null {
  */
 export function renderBurnPage(shell: string, key: string): string | null {
   return embed(shell, { key, burnPending: true });
+}
+
+/** A protected paste: the client asks for the passphrase (no content in the page). */
+export function renderLockedPage(shell: string, payload: LockedPending): string | null {
+  return embed(shell, payload);
 }
 
 /** Insert the payload as inert JSON just before </body>. */

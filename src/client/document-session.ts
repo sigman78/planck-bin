@@ -1,4 +1,4 @@
-import { StorageService, type SaveOptions } from './storage';
+import { StorageService, type LoadResult, type SaveOptions } from './storage';
 import type { BurnState } from './paste';
 import {
   highlightContent,
@@ -7,6 +7,7 @@ import {
   type Highlighted,
 } from './highlight-config';
 import { buildPath, type ParsedPath } from './path-utils';
+import { lockContent, openLock } from './lock-crypto';
 
 export interface DocumentRenderResult {
   paste: {
@@ -15,16 +16,30 @@ export interface DocumentRenderResult {
     language?: string;
     frozen?: boolean;
     burn?: BurnState;
+    locked?: boolean;
   };
   highlighted?: Highlighted;
   canonicalPath: string;
 }
 
+export interface SessionSaveOptions extends Omit<SaveOptions, 'lock'> {
+  /** Protected paste: encrypt in the browser under this passphrase. */
+  passphrase?: string;
+}
+
 export class DocumentSession {
   constructor(private readonly storage: StorageService = new StorageService()) {}
 
-  async save(content: string, options?: SaveOptions): Promise<DocumentRenderResult> {
-    const result = await this.storage.save(content, options);
+  async save(content: string, options: SessionSaveOptions = {}): Promise<DocumentRenderResult> {
+    const { passphrase, ...rest } = options;
+    let result;
+    if (passphrase !== undefined) {
+      const { envelope, lock } = await lockContent(content, passphrase);
+      result = await this.storage.save(envelope, { ...rest, lock });
+      this.storage.remember({ key: result.key, content, burn: result.burn, locked: true });
+    } else {
+      result = await this.storage.save(content, rest);
+    }
     const highlightResult = highlightContent(content);
     const language = highlightResult.language;
     const ext = language ? getExtensionForLanguage(language) : undefined;
@@ -35,16 +50,42 @@ export class DocumentSession {
         key: result.key,
         language,
         burn: result.burn,
+        locked: passphrase !== undefined,
       },
       highlighted: highlightResult.highlighted,
       canonicalPath: buildPath(result.key, ext),
     };
   }
 
-  /** @throws BurnPendingError for an unread burn paste, unless `reveal` is set */
+  /**
+   * @throws BurnPendingError for an unread burn paste, unless `reveal` is set
+   * @throws LockedError for a protected paste (see unlock)
+   */
   async load(path: ParsedPath, reveal = false): Promise<DocumentRenderResult> {
+    return this.present(path, await this.storage.load(path.key, reveal));
+  }
+
+  /**
+   * Open a protected paste with `passphrase`.
+   * @throws UnlockRejectedError for a wrong passphrase
+   * @throws Error('Document not found') when it is gone
+   */
+  async unlock(path: ParsedPath, salt: string, passphrase: string): Promise<DocumentRenderResult> {
+    const { token, decrypt } = await openLock(passphrase, salt);
+    const data = await this.storage.unlock(path.key, token);
+    const doc: LoadResult = {
+      key: data.key,
+      content: await decrypt(data.content),
+      burn: data.burn ? 'burned' : undefined,
+      locked: true,
+    };
+    // Back/forward in this tab shows it again without asking (like a revealed burn paste).
+    this.storage.remember(doc);
+    return this.present(path, doc);
+  }
+
+  private present(path: ParsedPath, result: LoadResult): DocumentRenderResult {
     const urlLanguage = path.ext ? resolveLanguage(path.ext) : undefined;
-    const result = await this.storage.load(path.key, reveal);
     // The URL extension is the only language source; without one, auto-detect.
     const highlightResult = highlightContent(result.content, urlLanguage);
     const plain = urlLanguage === '';
@@ -57,6 +98,7 @@ export class DocumentSession {
         language,
         frozen: result.frozen,
         burn: result.burn,
+        locked: result.locked,
       },
       highlighted: highlightResult.highlighted,
       canonicalPath: plain

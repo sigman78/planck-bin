@@ -8,8 +8,14 @@
 import type { Context } from 'hono';
 import type { Env } from './types';
 import { getServerConfig } from './config';
-import { countView, loadDocumentWithin, toGetResponse } from './documents';
-import { renderBurnPage, renderDocumentPage, renderNotFoundPage } from './render';
+import {
+  countView,
+  isLockedStub,
+  loadDocumentWithin,
+  lockedPending,
+  toGetResponse,
+} from './documents';
+import { renderBurnPage, renderDocumentPage, renderLockedPage, renderNotFoundPage } from './render';
 import { BURN_PENDING } from './types';
 import { isReadAllowed } from './request-policy';
 
@@ -91,9 +97,13 @@ async function renderRoute(
     // tokens, which slows scrapers that enumerate paste URLs.
     if (!(await isReadAllowed(c))) return null;
     const doc = await loadDocumentWithin(c, route.key, MAX_RENDER_CHARS);
-    // The page never reads a burn paste: the client shows a reveal prompt.
-    if (doc === BURN_PENDING) {
-      const html = renderBurnPage(await shell.clone().text(), route.key);
+    // The page never reads a burn or protected paste: the client asks first.
+    if (doc === BURN_PENDING || isLockedStub(doc)) {
+      const shellHtml = await shell.clone().text();
+      const html =
+        doc === BURN_PENDING
+          ? renderBurnPage(shellHtml, route.key)
+          : renderLockedPage(shellHtml, lockedPending(route.key, doc));
       if (html === null) return null;
       return new Response(html, {
         status: 200,

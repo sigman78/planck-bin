@@ -15,6 +15,7 @@ Pastebin for Cloudflare Workers with D1 storage. API compatible with haste-serve
 - Command palette (Ctrl+/) and keyboard shortcuts for all actions.
 - Same HTTP API as haste-server, so [haste-client](https://github.com/seejohnrun/haste-client) works.
 - Per-paste lifetime (3 days to permanent) and burn after reading.
+- Passphrase-protected pastes, encrypted in the browser.
 - Paste expiry with a nightly cleanup cron, rate limits, optional storage cap.
 - Local drafts and recent paste list in the browser.
 
@@ -114,6 +115,17 @@ curl --data-binary @secret.txt "https://your-worker.dev/documents?expires=3d&bur
   without content. The page URL (`/KEY`) never reads it either: the palette pill turns into an
   "Open and burn" question, and only that answer reads it, so link previews and prefetchers
   cannot burn it. If that read fails (offline, server error), the paste is left intact.
+- A protected paste is created with a JSON body `{"content", "lock": {"salt", "token"}}`:
+  `content` is already encrypted, `salt` (16 bytes) and `token` (32 bytes) are base64url. The
+  response carries `"locked": true`. The server stores the ciphertext, the salt and SHA-256 of the
+  token. `GET /documents/KEY` returns `{"key", "locked": true, "salt"}` (plus `"burn": true` for a
+  burn paste) without content, `GET /raw/KEY` returns `403`, and the page URL embeds only that
+  marker.
+- `POST /documents/KEY/unlock` with `{"token"}` returns the stored document (still encrypted) for
+  the right token: `403 {"message", "attemptsLeft"}` for a wrong one, `410` for the tenth wrong
+  one, which deletes the paste. Attempts are counted before they are checked, so concurrent
+  guesses cannot exceed the cap; a right token is not counted. A protected burn paste is deleted
+  by its unlock, not by `GET`. Unlocks spend a read rate-limit token.
 - Built-in pages such as `about` work on both and carry `"frozen": true`.
 - Other methods on these routes return `405` with an `Allow` header.
 
@@ -136,6 +148,22 @@ after reading** makes the next save a one-time paste (picked again, it reads **D
 reading** and turns it off). Non-default choices show as an icon on
 the Save chip: a clock for a lifetime, a flame for burn (the flame wins when both are set); the
 details are in its tooltip. Burn pastes are not added to the recent list.
+
+**Protect with passphrase** makes the next save a protected paste with a generated passphrase:
+four words from the [EFF long wordlist](https://www.eff.org/dice) (about 52 bits), shown once
+after saving with a copy button. **Set own passphrase** uses yours instead (at least 8
+characters). The Save chip then shows a lock. Opening the link asks for the passphrase; case and
+the separators between words (spaces, dashes, dots) do not matter. **Copy passphrase** stays
+available in the tab that created the paste. Protected pastes appear in the recent list as
+"Protected paste", without their text.
+
+How it works: the browser derives a key from the passphrase with PBKDF2-SHA256 (600,000
+iterations, random salt) and splits it with HKDF into an AES-256-GCM content key and an unlock
+token. Only the ciphertext, the salt and a hash of the token reach the server, which releases
+the ciphertext only for the right token and deletes the paste after 10 wrong passphrases. A
+stolen database still needs an offline search through PBKDF2 per guess. The server also serves
+the page's JavaScript, so this protects against database leaks and passive operators, not
+against a modified deployment.
 
 Printing (the browser's Print) produces a plain black-and-white source listing: numbered lines,
 long lines wrapped under their own number, and the paste address, line count and page numbers in

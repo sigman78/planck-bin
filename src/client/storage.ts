@@ -8,8 +8,16 @@
  * - Throws errors on failure
  */
 
-import type { BurnPending, GetResponse, LifetimeId, SaveResponse } from '../shared/types';
-import { takeEmbeddedDocument } from './embedded-document';
+import type {
+  BurnPending,
+  GetResponse,
+  LifetimeId,
+  LockSpec,
+  LockedPending,
+  SaveResponse,
+  UnlockRejected,
+} from '../shared/types';
+import { isLockedPending, takeEmbeddedDocument } from './embedded-document';
 import type { BurnState } from './paste';
 
 export interface LoadResult {
@@ -18,12 +26,16 @@ export interface LoadResult {
   frozen?: boolean;
   /** Burn after reading: 'armed' for the creator's copy, 'burned' once read. */
   burn?: BurnState;
+  /** Protected paste (content here is the decrypted text). */
+  locked?: boolean;
 }
 
 export interface SaveOptions {
   /** Omitted = the server default. */
   expires?: LifetimeId;
   burn?: boolean;
+  /** Protected paste: the content is already encrypted. */
+  lock?: LockSpec;
 }
 
 export interface SaveResult {
@@ -42,6 +54,32 @@ export class BurnPendingError extends Error {
   }
 }
 
+/**
+ * Thrown by load() for a protected paste: the caller asks for the passphrase
+ * and unlocks it with the salt.
+ */
+export class LockedError extends Error {
+  readonly key: string;
+  readonly salt: string;
+  readonly burn: boolean;
+
+  constructor(pending: LockedPending) {
+    super('Protected paste');
+    this.name = 'LockedError';
+    this.key = pending.key;
+    this.salt = pending.salt;
+    this.burn = pending.burn === true;
+  }
+}
+
+/** Thrown by unlock() for a wrong passphrase; `attemptsLeft` 0 = the paste is deleted. */
+export class UnlockRejectedError extends Error {
+  constructor(readonly attemptsLeft: number) {
+    super(attemptsLeft > 0 ? 'Wrong passphrase' : 'Too many wrong passphrases');
+    this.name = 'UnlockRejectedError';
+  }
+}
+
 /** Recently loaded or saved pastes kept in memory (pastes never change). */
 const RECENT_LIMIT = 16;
 
@@ -53,7 +91,7 @@ export class StorageService {
    * then resolves in microtasks, before the next frame, so the page matches
    * the browser's snapshot when a swipe gesture hands over to it.
    */
-  private remember(doc: LoadResult): void {
+  remember(doc: LoadResult): void {
     this.recent.delete(doc.key);
     this.recent.set(doc.key, doc);
     if (this.recent.size > RECENT_LIMIT) {
@@ -65,6 +103,7 @@ export class StorageService {
    * Load document from server
    * @throws Error if fetch fails or document not found
    * @throws BurnPendingError for an unread burn paste, unless `reveal` is set
+   * @throws LockedError for a protected paste (see unlock)
    * @returns LoadedDocumentState with guaranteed key
    */
   async load(key: string, reveal = false): Promise<LoadResult> {
@@ -80,6 +119,7 @@ export class StorageService {
     if (embedded === 'burn-pending' && !reveal) throw new BurnPendingError(key);
     const data =
       embedded && embedded !== 'burn-pending' ? embedded : await this.fetchDocument(key, reveal);
+    if (isLockedPending(data)) throw new LockedError(data);
     if ('burnPending' in data) throw new BurnPendingError(key);
     const doc: LoadResult = {
       content: data.content,
@@ -96,7 +136,10 @@ export class StorageService {
    * Without `reveal`, ?peek=1 makes the server answer a burn paste with a
    * marker instead of reading (and destroying) it.
    */
-  private async fetchDocument(key: string, reveal: boolean): Promise<GetResponse | BurnPending> {
+  private async fetchDocument(
+    key: string,
+    reveal: boolean
+  ): Promise<GetResponse | BurnPending | LockedPending> {
     const response = await fetch(reveal ? `/documents/${key}` : `/documents/${key}?peek=1`);
 
     if (!response.ok) {
@@ -110,6 +153,27 @@ export class StorageService {
   }
 
   /**
+   * Trade the unlock token for the protected paste's ciphertext. Not cached:
+   * the caller remembers the decrypted text.
+   * @throws UnlockRejectedError for a wrong token
+   * @throws Error('Document not found') when it is gone
+   */
+  async unlock(key: string, token: string): Promise<GetResponse> {
+    const response = await fetch(`/documents/${key}/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (response.status === 403 || response.status === 410) {
+      const data: UnlockRejected = await response.json();
+      throw new UnlockRejectedError(data.attemptsLeft);
+    }
+    if (response.status === 404) throw new Error('Document not found');
+    if (!response.ok) throw new Error(`Failed to unlock document: ${response.statusText}`);
+    return response.json();
+  }
+
+  /**
    * Save document to server
    * @throws Error if save fails
    * @returns SaveResult with guaranteed key
@@ -119,12 +183,13 @@ export class StorageService {
     if (options.expires) query.set('expires', options.expires);
     if (options.burn) query.set('burn', '1');
     const search = query.toString();
+    // A lock rides in a JSON body: the token stays out of URLs and logs.
     const response = await fetch(search ? `/documents?${search}` : '/documents', {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain',
+        'Content-Type': options.lock ? 'application/json' : 'text/plain',
       },
-      body: content,
+      body: options.lock ? JSON.stringify({ content, lock: options.lock }) : content,
     });
 
     if (!response.ok) {
@@ -135,7 +200,8 @@ export class StorageService {
 
     // The creator sees a burn paste from memory: no read, so it stays armed.
     const burn = data.burn ? 'armed' : undefined;
-    this.remember({ key: data.key, content, burn });
+    // A protected paste is remembered by the caller, as text rather than ciphertext.
+    if (!options.lock) this.remember({ key: data.key, content, burn });
     return { key: data.key, burn };
   }
 }

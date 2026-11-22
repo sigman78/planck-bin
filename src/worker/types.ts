@@ -9,11 +9,31 @@ export interface StoredDocument {
 export const BURN_PENDING = 'burn-pending';
 export type BurnPending = typeof BURN_PENDING;
 
+/**
+ * A protected document found by get/getWithin: its (encrypted) content stays
+ * in D1 until an unlock with the right token.
+ */
+export interface LockedStub {
+  locked: true;
+  salt: string;
+  burn: boolean;
+}
+
+/** What reserveUnlock hands back: everything needed to check and serve one attempt. */
+export interface UnlockCandidate extends StoredDocument {
+  verifier: string;
+  burn: boolean;
+  /** Attempts counted so far, including this one. */
+  failures: number;
+}
+
 export interface CreateOptions {
   /** Lifetime in days, 0 = never; omitted = the store default. */
   expireDays?: number;
   /** Delete the document on its first full read (take). */
   burn?: boolean;
+  /** Protected: the content is ciphertext, released only for the matching token. */
+  lock?: { salt: string; verifier: string };
 }
 
 export interface CreatedDocument {
@@ -27,7 +47,7 @@ export interface DocumentStore {
    * Fetch a document, or null if missing/expired. A burn-after-reading
    * document is not read: it yields BURN_PENDING (use take to read it).
    */
-  get(key: string): Promise<StoredDocument | BurnPending | null>;
+  get(key: string): Promise<StoredDocument | BurnPending | LockedStub | null>;
   /**
    * Like get, but leaves content longer than `maxChars` characters in the
    * database and returns 'too-large' instead.
@@ -35,12 +55,25 @@ export interface DocumentStore {
   getWithin(
     key: string,
     maxChars: number
-  ): Promise<StoredDocument | BurnPending | 'too-large' | null>;
+  ): Promise<StoredDocument | BurnPending | LockedStub | 'too-large' | null>;
   /**
    * Atomically delete a burn-after-reading document and return it; null when
-   * it is missing, expired, not a burn document, or another read won the race.
+   * it is missing, expired, not a burn document, protected, or another read
+   * won the race.
    */
   take(key: string): Promise<StoredDocument | null>;
+  /**
+   * Count one unlock attempt of a protected document and return it, in one
+   * statement, so concurrent guesses can never exceed `maxAttempts`. Null when
+   * it is missing, expired, not protected, or out of attempts.
+   */
+  reserveUnlock(key: string, maxAttempts: number): Promise<UnlockCandidate | null>;
+  /** Undo the count of an attempt that turned out to be right. */
+  releaseUnlock(key: string): Promise<void>;
+  /** Like take, for a protected burn document after a successful unlock. */
+  takeLocked(key: string): Promise<StoredDocument | null>;
+  /** Delete a document outright (a protected one out of attempts). */
+  remove(key: string): Promise<void>;
   /** Atomically insert content under a fresh unique key. */
   create(
     content: string,

@@ -7,8 +7,14 @@
  */
 
 import type { Context } from 'hono';
-import type { GetResponse } from '../shared/types';
-import { BURN_PENDING, type BurnPending, type Env, type StoredDocument } from './types';
+import type { GetResponse, LockedPending } from '../shared/types';
+import {
+  BURN_PENDING,
+  type BurnPending,
+  type Env,
+  type LockedStub,
+  type StoredDocument,
+} from './types';
 import { createStore } from './storage';
 import { getServerConfig } from './config';
 
@@ -49,17 +55,19 @@ export function isBuiltinPage(key: string): boolean {
  *
  * A burn-after-reading document yields BURN_PENDING unless `consume` is set;
  * then it is deleted and returned (or null when another read got it first).
+ * A protected document always yields its LockedStub: only an unlock reads it.
  */
 export async function loadDocument(
   c: AppContext,
   key: string,
   { consume = false }: { consume?: boolean } = {}
-): Promise<LoadedDocument | BurnPending | null> {
+): Promise<LoadedDocument | BurnPending | LockedStub | null> {
   if (isBuiltinPage(key)) return loadBuiltinPage(c, key);
   if (!isValidKey(key)) return null;
 
   const store = createStore(c.env);
   const stored = await store.get(key);
+  if (isLockedStub(stored)) return stored;
   if (stored !== BURN_PENDING) return stored ? fromStored(key, stored, false) : null;
   if (!consume) return BURN_PENDING;
 
@@ -77,7 +85,7 @@ export async function loadDocumentWithin(
   c: AppContext,
   key: string,
   maxChars: number
-): Promise<LoadedDocument | BurnPending | 'too-large' | null> {
+): Promise<LoadedDocument | BurnPending | LockedStub | 'too-large' | null> {
   if (isBuiltinPage(key)) {
     const page = await loadBuiltinPage(c, key);
     return page && page.content.length > maxChars ? 'too-large' : page;
@@ -86,10 +94,20 @@ export async function loadDocumentWithin(
 
   const stored = await createStore(c.env).getWithin(key, maxChars);
   if (stored === null || stored === 'too-large' || stored === BURN_PENDING) return stored;
+  if (isLockedStub(stored)) return stored;
   return fromStored(key, stored, false);
 }
 
-function fromStored(key: string, stored: StoredDocument, burn: boolean): LoadedDocument {
+export function isLockedStub(value: unknown): value is LockedStub {
+  return typeof value === 'object' && value !== null && 'locked' in value;
+}
+
+/** The content-free answer for a protected paste (API and page render). */
+export function lockedPending(key: string, stub: LockedStub): LockedPending {
+  return { key, locked: true, salt: stub.salt, ...(stub.burn ? { burn: true } : {}) };
+}
+
+export function fromStored(key: string, stored: StoredDocument, burn: boolean): LoadedDocument {
   return {
     key,
     content: stored.content,

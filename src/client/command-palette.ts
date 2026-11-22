@@ -39,9 +39,22 @@ interface Row {
   action?: (evt: { shiftKey: boolean }) => boolean | void;
 }
 
-/** Callbacks for the island's question mode (see showPrompt). */
-export interface PromptHandlers {
-  confirm: () => void;
+/** The island's question mode (see showPrompt). */
+export interface PromptOptions {
+  title: string;
+  text: string;
+  /** Shown on its own line in a selectable monospace block (a generated passphrase). */
+  secret?: string;
+  /** A one-line text field; Enter confirms with its value. */
+  input?: { label: string; placeholder?: string };
+  confirmLabel: string;
+  /** Confirm label while busy (setPromptBusy). */
+  busyLabel?: string;
+  cancelLabel: string;
+  /** Escape cancels. Off for questions that must be answered. */
+  dismissible?: boolean;
+  /** Receives the field value ('' without an input). */
+  confirm: (value: string) => void;
   cancel: () => void;
 }
 
@@ -63,9 +76,13 @@ export class CommandPalette {
   private readonly input: HTMLInputElement;
   private readonly list: HTMLElement;
   private readonly prompt: HTMLElement;
+  private readonly promptTitle: HTMLElement;
+  private readonly promptText: HTMLElement;
+  private readonly promptSecret: HTMLElement;
+  private readonly promptInput: HTMLInputElement;
   private readonly promptConfirm: HTMLButtonElement;
   private readonly promptCancel: HTMLButtonElement;
-  private promptHandlers: PromptHandlers | null = null;
+  private promptOptions: PromptOptions | null = null;
   /** Bumped by every show/hide, so a stale deferred show does nothing. */
   private promptToken = 0;
 
@@ -92,6 +109,10 @@ export class CommandPalette {
     this.input = q('.island-input');
     this.list = q('.island-list');
     this.prompt = q('.island-prompt');
+    this.promptTitle = q('.island-prompt-title');
+    this.promptText = q('.island-prompt-text');
+    this.promptSecret = q('.island-prompt-secret');
+    this.promptInput = q('.island-prompt-input');
     this.promptConfirm = q('.island-prompt-confirm');
     this.promptCancel = q('.island-prompt-cancel');
   }
@@ -99,8 +120,21 @@ export class CommandPalette {
   init(): void {
     this.panel.inert = true;
     this.prompt.inert = true;
-    this.promptConfirm.addEventListener('click', () => this.promptHandlers?.confirm());
-    this.promptCancel.addEventListener('click', () => this.promptHandlers?.cancel());
+    const confirm = () => {
+      if (!this.promptConfirm.disabled) this.promptOptions?.confirm(this.promptInput.value);
+    };
+    this.promptConfirm.addEventListener('click', confirm);
+    this.promptCancel.addEventListener('click', () => this.promptOptions?.cancel());
+    this.prompt.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Enter' && evt.target === this.promptInput) {
+        evt.preventDefault();
+        confirm();
+      } else if (evt.key === 'Escape' && this.promptOptions?.dismissible) {
+        evt.preventDefault();
+        this.promptOptions.cancel();
+      }
+    });
+    this.prompt.addEventListener('animationend', () => this.prompt.classList.remove('rejected'));
 
     this.saveBtn.addEventListener('click', (evt) => {
       evt.stopPropagation();
@@ -114,6 +148,8 @@ export class CommandPalette {
       const target = evt.target as Node;
       // Row clicks close the palette before bubbling here; never reopen for them.
       if (this.isOpen() || this.isPrompting()) return;
+      // A prompt button may have just folded the prompt: that click is not for the pill.
+      if (this.prompt.contains(target)) return;
       if (this.saveBtn.contains(target) || this.panel.contains(target)) return;
       this.open();
     });
@@ -189,15 +225,31 @@ export class CommandPalette {
 
   /**
    * Morph the pill into a question with two answers. It stays until
-   * hidePrompt: outside clicks, Escape and the palette shortcut do nothing.
+   * hidePrompt: outside clicks and the palette shortcut do nothing, nor does
+   * Escape unless the question is dismissible.
    * On first load the pill fades in first, then morphs, so the change from
    * the familiar pill reads as the app asking.
    */
-  showPrompt(handlers: PromptHandlers): void {
+  showPrompt(options: PromptOptions): void {
     this.close(false);
-    this.promptHandlers = handlers;
+    this.promptOptions = options;
+    this.promptTitle.textContent = options.title;
+    this.promptText.textContent = options.text;
+    this.promptSecret.hidden = options.secret === undefined;
+    this.promptSecret.textContent = options.secret ?? '';
+    this.promptInput.hidden = options.input === undefined;
+    this.promptInput.value = '';
+    this.promptInput.placeholder = options.input?.placeholder ?? '';
+    if (options.input) this.promptInput.setAttribute('aria-label', options.input.label);
+    this.promptCancel.textContent = options.cancelLabel;
     this.setPromptBusy(false);
-    if (this.isPrompting()) return;
+    if (this.isPrompting()) {
+      // Already asking: the new question replaces the old one in place.
+      this.root.style.width = `${this.prompt.offsetWidth}px`;
+      this.root.style.height = `${this.prompt.offsetHeight}px`;
+      this.focusPrompt();
+      return;
+    }
     const token = ++this.promptToken;
     const fresh = !this.root.hasAttribute('data-settled');
     this.settle();
@@ -211,29 +263,53 @@ export class CommandPalette {
       this.prompt.inert = false;
       this.root.style.width = `${this.prompt.offsetWidth}px`;
       this.root.style.height = `${this.prompt.offsetHeight}px`;
-      this.promptConfirm.focus({ preventScroll: true });
+      this.focusPrompt();
     };
     // Two frames: the first paints the settled pill, the second starts the morph.
     if (fresh) requestAnimationFrame(() => requestAnimationFrame(morph));
     else morph();
   }
 
+  private focusPrompt(): void {
+    const target = this.promptInput.hidden ? this.promptConfirm : this.promptInput;
+    target.focus({ preventScroll: true });
+  }
+
   /** Fold the question back into the pill. */
   hidePrompt(): void {
     this.promptToken++;
-    this.promptHandlers = null;
+    this.promptOptions = null;
     if (!this.isPrompting()) return;
-    this.promptConfirm.blur();
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && this.prompt.contains(focused)) focused.blur();
+    this.promptInput.value = '';
     this.root.classList.remove('prompting');
     this.prompt.inert = true;
     this.fold();
   }
 
-  /** While the answer is being acted on: buttons off, confirm says so. */
+  /** While the answer is being acted on: buttons and field off, confirm says so. */
   setPromptBusy(busy: boolean): void {
+    const options = this.promptOptions;
     this.promptConfirm.disabled = busy;
     this.promptCancel.disabled = busy;
-    this.promptConfirm.textContent = busy ? 'Opening...' : 'Open and burn';
+    this.promptInput.readOnly = busy;
+    if (options) {
+      this.promptConfirm.textContent =
+        busy && options.busyLabel ? options.busyLabel : options.confirmLabel;
+    }
+  }
+
+  /** The answer was wrong: a short shake, and the field is ready for another try. */
+  rejectPrompt(): void {
+    this.setPromptBusy(false);
+    this.prompt.classList.remove('rejected');
+    void this.prompt.offsetWidth; // restart the animation
+    this.prompt.classList.add('rejected');
+    if (!this.promptInput.hidden) {
+      this.promptInput.focus({ preventScroll: true });
+      this.promptInput.select();
+    }
   }
 
   toggle(): void {
@@ -685,6 +761,7 @@ const SAVE_ICON_PATHS: Record<SaveIcon, string[]> = {
     'M5 0.9 C5.4 3 8.6 4.6 8.6 7.6 A3.6 3.6 0 0 1 1.4 7.6 C1.4 6 2.2 4.9 3.1 4.2 ' +
       'C3.2 5.5 3.8 6.3 4.5 6.4 C4.4 4.6 4.2 2.6 5 0.9 Z',
   ],
+  lock: ['M1.6 5.6 H8.4 V10.9 H1.6 Z', 'M3.1 5.6 V3.9 A1.9 1.9 0 0 1 6.9 3.9 V5.6'],
 };
 
 function saveIcon(kind: SaveIcon): SVGSVGElement {

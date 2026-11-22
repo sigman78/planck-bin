@@ -26,6 +26,14 @@ function isDocumentWrite(path: string, method: string): boolean {
   return method === 'POST' && path === '/documents';
 }
 
+/** An unlock is a read (and a passphrase guess): it spends a read token too. */
+function isDocumentUnlock(path: string, method: string): boolean {
+  return method === 'POST' && /^\/documents\/[^/]+\/unlock$/.test(path);
+}
+
+/** The unlock body is a small JSON object holding one token. */
+const UNLOCK_BODY_LIMIT = 1024;
+
 /** HEAD runs the GET handler (and its D1 read), so it is limited like GET. */
 function isDocumentRead(path: string, method: string): boolean {
   return (method === 'GET' || method === 'HEAD') && /^\/(?:documents|raw)\/[^/]+$/.test(path);
@@ -89,6 +97,15 @@ const enforceRequestPolicy: MiddlewareHandler<App> = async (c, next) => {
   if (isDocumentRead(path, method)) {
     const limited = await checkRateLimit(c, c.env.READ_RATE_LIMITER);
     if (limited) return limited;
+  }
+
+  if (isDocumentUnlock(path, method)) {
+    const limited = await checkRateLimit(c, c.env.READ_RATE_LIMITER);
+    if (limited) return limited;
+    return bodyLimit({
+      maxSize: UNLOCK_BODY_LIMIT,
+      onError: (context) => context.json({ message: 'Request body is too large' }, 413),
+    })(c, next);
   }
 
   await next();
