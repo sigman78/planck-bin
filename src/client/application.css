@@ -9,6 +9,7 @@
     --color-icon:        #c4dce3;   /* island mark and keycap */
     --color-accent:      #d33682;   /* progress bar, save chip, focus rings (solarized magenta) */
     --color-logo:        #fdf6e3;   /* logo fill (solarized base3) */
+    --color-preview-on:  #2aa198;   /* preview chip while on (solarized cyan) */
     --color-focus-muted: #2b5c68;   /* quiet focus ring: viewer (its left edge runs along the gutter) and gutter links */
 
     /* ui / overlay colors */

@@ -31,6 +31,13 @@ describe('renderDocumentPage', () => {
     expect(render({ key: 'k', content: 'x' })).not.toBeNull();
   });
 
+  it('marks the viewer of a paste that opens in preview', () => {
+    const viewer = (key: string) =>
+      parse(render({ key, content: '# x' }, `${key}.md`)!).getElementById('viewer')!;
+    expect(viewer('about').hasAttribute('data-preview-default')).toBe(true);
+    expect(viewer('tavelu-hasoq').hasAttribute('data-preview-default')).toBe(false);
+  });
+
   it('round-trips hostile content exactly through the embedded JSON', () => {
     const doc: GetResponse = {
       key: 'tavelu-hasoq',

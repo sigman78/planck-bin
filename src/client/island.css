@@ -185,6 +185,64 @@
     vertical-align: -1px;
 }
 
+/*
+ * Preview toggle: an icon chip (the mode's icon), shown only while presenting a
+ * paste that has a preview mode. Off: keycap colors; on: solarized cyan, so it
+ * never reads as the Save chip.
+ */
+.island-hint .island-preview {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    border-radius: 11px;
+    background: var(--color-island-chip);
+    color: var(--color-icon);
+}
+
+.island-hint .island-preview:not(:disabled) {
+    max-width: 60px;
+    opacity: 1;
+    margin-right: 6px;
+    padding: 0 9px;
+}
+
+.island-hint .island-preview:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--color-logo);
+}
+
+.island-hint .island-preview[aria-pressed='true'] {
+    background: var(--color-preview-on);
+    color: var(--color-bg);
+}
+
+.island-preview-icon {
+    display: block;
+    flex: none;
+}
+
+.island-hint .island-preview[aria-busy='true'] {
+    animation: island-preview-busy 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes island-preview-busy {
+    to {
+        opacity: 0.5;
+    }
+}
+
+.island-hint .island-preview:disabled {
+    cursor: default;
+    pointer-events: none;
+}
+
+.island-preview:focus-visible {
+    outline: 1px solid var(--color-preview-on);
+    outline-offset: 2px;
+}
+
 .island-hint .island-save:disabled {
     cursor: default;
     pointer-events: none;

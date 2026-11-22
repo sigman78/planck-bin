@@ -21,6 +21,7 @@ press Enter.
 - **:42** - go to line 42
 - **?text** - find text in the paste (Enter / Shift+Enter for next / previous)
 - **Switch language** - change syntax highlighting
+- **Preview markdown** / **Exit preview** - switch a markdown paste between rendered and source view
 - **Recent pastes** - pastes you saved or opened in this browser (stored only locally)
 - **Expires** - how long new pastes are kept (while editing)
 - **Burn after reading** - make the next paste readable only once (while editing)
@@ -40,6 +41,7 @@ The rest use **Alt+Shift** on Windows and Linux, **Opt+Shift** on Mac:
 - **R** - Open raw view in a new tab
 - **F** - Find in paste
 - **G** - Go to line
+- **V** - Markdown preview / source
 - **L** - Switch language
 - **H** - Recent pastes
 - **=** / **-** / **0** - Zoom in / out / reset
@@ -70,6 +72,12 @@ four-word passphrase: press Enter to use it, or type your own. After saving it i
 more to copy; send it separately from the link. Whoever opens the link has to enter it; case and the
 separators between words do not matter. After 10 wrong passphrases the paste is deleted. Lost
 passphrases cannot be recovered: the server never sees them.
+
+## Markdown Preview
+
+Markdown pastes can be shown rendered: click **Preview** in the pill or press **Alt+Shift+V**.
+Raw HTML stays text and images show as links. Add `#preview` to a link to open it rendered.
+Printing a preview prints the rendered document.
 
 ## Privacy
 

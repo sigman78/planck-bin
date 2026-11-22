@@ -10,6 +10,7 @@
 		<link rel="stylesheet" type="text/css" href="./application.css" />
 		<link rel="stylesheet" type="text/css" href="./view-transitions.css" />
 		<link rel="stylesheet" type="text/css" href="./island.css" />
+		<link rel="stylesheet" type="text/css" href="./preview.css" />
 
 		<link rel="icon" href="./favicon.ico" />
 
@@ -26,6 +27,8 @@
 				<!-- Save sits right of everything that expands on hover, so it never slides away from the pointer. -->
 				<span class="island-text island-slide" aria-hidden="true">commands</span>
 				<kbd class="island-kc island-slide" aria-hidden="true">Ctrl /</kbd>
+				<!-- Shown while presenting a paste that has a preview mode (e.g. markdown); a toggle. -->
+				<button type="button" class="island-preview island-slide" disabled aria-hidden="true" aria-pressed="false" aria-label="Preview"></button>
 				<button type="button" class="island-save island-slide" disabled aria-hidden="true">Save</button>
 				<button type="button" class="island-trigger" aria-label="Commands (Ctrl+/)" aria-haspopup="listbox" aria-expanded="false">
 					<svg class="island-mark" width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -62,6 +65,8 @@
 			<div id="line-highlight" aria-hidden="true"></div>
 			<!-- tabindex lets keyboard users scroll long lines; the server renderer matches this tag exactly. -->
 			<pre id="viewer" style="display: none" tabindex="0" role="region" aria-label="Paste content"><code class="hljs"></code></pre>
+			<!-- The rendered preview (sanitized), shown instead of the viewer while it is on. -->
+			<article id="preview" hidden tabindex="0" aria-label="Paste preview"></article>
 			<textarea id="editor" spellcheck="false" style="display: none"
 				aria-label="Paste content" aria-describedby="editor-help"
 				placeholder="Paste your code here..."></textarea>

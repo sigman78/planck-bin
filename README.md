@@ -16,6 +16,7 @@ Pastebin for Cloudflare Workers with D1 storage. API compatible with haste-serve
 - Same HTTP API as haste-server, so [haste-client](https://github.com/seejohnrun/haste-client) works.
 - Per-paste lifetime (3 days to permanent) and burn after reading.
 - Passphrase-protected pastes, encrypted in the browser.
+- Rendered preview for markdown pastes.
 - Paste expiry with a nightly cleanup cron, rate limits, optional storage cap.
 - Local drafts and recent paste list in the browser.
 
@@ -167,9 +168,24 @@ stolen database still needs an offline search through PBKDF2 per guess. The serv
 the page's JavaScript, so this protects against database leaks and passive operators, not
 against a modified deployment.
 
+Markdown pastes get a preview chip in the pill, marked with the markdown logo (also **Preview
+markdown** / **Exit preview** in the palette, Alt+Shift+V). It renders CommonMark with GitHub tables, strikethrough, autolinks and task lists
+using [markdown-it](https://github.com/markdown-it/markdown-it); the result goes through
+[DOMPurify](https://github.com/cure53/DOMPurify) before it reaches the page. Raw HTML in the paste
+shows as text. Images show as links, since the CSP blocks remote images. Only absolute http(s) and
+mailto links are kept; they open in a new tab without a referrer. The renderer is loaded on first
+use. `#preview` in the URL opens a paste in preview; the about page opens in preview by default
+and `#source` shows its text. Find and go to line return to the source. Preview modes for other
+formats can be added in `src/client/preview/registry.ts`.
+
+Known limitation: a `#preview` link can show the source for a frame or two before the preview
+replaces it. The server never sees the hash, so it cannot hide the server-rendered text the way it
+does for the about page. A one-line inline script in `<head>` (allowed in the CSP by its hash) fixes
+this and was tried, but is left out for now.
+
 Printing (the browser's Print) produces a plain black-and-white source listing: numbered lines,
 long lines wrapped under their own number, and the paste address, line count and page numbers in
-the page margins.
+the page margins. While a preview is shown, the rendered document prints instead.
 
 ## Shortcuts
 
@@ -183,6 +199,7 @@ the page margins.
 | View raw          | Alt+Shift+R         | Opt+Shift+R         |
 | Find in paste     | Alt+Shift+F         | Opt+Shift+F         |
 | Go to line        | Alt+Shift+G         | Opt+Shift+G         |
+| Markdown preview  | Alt+Shift+V         | Opt+Shift+V         |
 | Switch language   | Alt+Shift+L         | Opt+Shift+L         |
 | Recent pastes     | Alt+Shift+H         | Opt+Shift+H         |
 | Zoom in/out/reset | Alt+Shift+= / - / 0 | Opt+Shift+= / - / 0 |

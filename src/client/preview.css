@@ -1,0 +1,318 @@
+/*
+  * Preview: a paste presented through a preview mode (rendered markdown).
+  * #preview replaces the viewer and gutter while it is on (.previewing on
+  * #editor-container); the source view underneath is left untouched.
+  * .markdown-body carries the typography, on screen (#preview) and in print
+  * (the copy print-listing.ts builds).
+  */
+
+#editor-container.previewing #viewer,
+#editor-container.previewing #gutter,
+#editor-container.previewing #line-highlight,
+/* Opening straight into a preview: the source stays hidden until it is ready. */
+#editor-container.preview-pending #viewer,
+#editor-container.preview-pending #gutter,
+#editor-container.preview-pending #line-highlight {
+    display: none !important;
+}
+
+/*
+ * First paint, before any script runs: a paste the server marked as opening in
+ * preview keeps its server-rendered source hidden. The client then sets
+ * .preview-settled. A #preview link cannot get the same: the server never sees
+ * the hash, so its source can paint for a frame or two before the client hides it.
+ */
+#editor-container:not(.preview-settled) #viewer[data-preview-default] {
+    display: none !important;
+}
+
+/* The preview eases in over the source it replaces. */
+#editor-container.previewing #preview {
+    animation: preview-in 0.18s ease-out;
+}
+
+@keyframes preview-in {
+    from {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #editor-container.previewing #preview {
+        animation: none;
+    }
+}
+
+#preview {
+    flex: 1;
+    min-width: 0;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 4px 8px 48px;
+    min-height: calc(100vh - 2 * var(--body-padding));
+    box-sizing: border-box;
+    font-size: calc(15px * var(--editor-zoom));
+}
+
+#preview[hidden] {
+    display: none;
+}
+
+#preview:focus {
+    outline: none;
+}
+
+#preview:focus-visible {
+    outline: 1px solid var(--color-focus-muted);
+    outline-offset: 4px;
+    border-radius: 2px;
+}
+
+.markdown-body {
+    color: var(--color-editor-text);
+    font-family: var(--font-ui);
+    line-height: 1.6;
+    overflow-wrap: break-word;
+}
+
+.markdown-body > :first-child {
+    margin-top: 0;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table {
+    margin: 0 0 1em;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    margin: 1.5em 0 0.6em;
+    color: var(--color-logo);
+    font-weight: bold;
+    line-height: 1.25;
+}
+
+.markdown-body h1 {
+    font-size: 1.8em;
+}
+
+.markdown-body h2 {
+    font-size: 1.4em;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.markdown-body h3 {
+    font-size: 1.15em;
+}
+
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    font-size: 1em;
+}
+
+.markdown-body strong {
+    color: var(--color-logo);
+}
+
+.markdown-body a {
+    color: #268bd2; /* solarized blue */
+    text-decoration: none;
+}
+
+.markdown-body a:hover,
+.markdown-body a:focus-visible {
+    text-decoration: underline;
+}
+
+/* Relative and #fragment links lose their target: plain text, not a fake link. */
+.markdown-body a:not([href]) {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* An image, shown as a link (remote images are blocked by the CSP). */
+.markdown-body .md-image::before {
+    content: "image: ";
+    color: var(--color-placeholder);
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 1.6em;
+}
+
+.markdown-body li + li {
+    margin-top: 0.25em;
+}
+
+.markdown-body li > ul,
+.markdown-body li > ol {
+    margin: 0.25em 0 0;
+}
+
+.markdown-body .task-list-container {
+    padding-left: 0.4em;
+    list-style: none;
+}
+
+.markdown-body .task-list-item-checkbox {
+    margin: 0 0.5em 0 0;
+    vertical-align: -1px;
+    accent-color: var(--color-accent);
+}
+
+.markdown-body blockquote {
+    padding: 0 1em;
+    border-left: 3px solid var(--color-placeholder);
+    color: var(--color-placeholder);
+}
+
+.markdown-body code {
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    font-family: var(--font-editor);
+    font-size: 0.88em;
+}
+
+.markdown-body pre {
+    padding: 0.8em 1em;
+    overflow-x: auto;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.18);
+    line-height: 1.45;
+    tab-size: 2;
+    scrollbar-width: thin;
+}
+
+.markdown-body pre code {
+    padding: 0;
+    background: none;
+    font-size: 0.85em;
+}
+
+.markdown-body table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    scrollbar-width: thin;
+}
+
+.markdown-body th,
+.markdown-body td {
+    padding: 0.35em 0.8em;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.markdown-body th {
+    color: var(--color-logo);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.markdown-body hr {
+    height: 1px;
+    margin: 1.6em 0;
+    border: 0;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Print: the rendered document in black on white (print-listing.ts copies it). */
+@media print {
+    #print-listing.markdown-body {
+        color: #000;
+        font-family: var(--font-ui);
+        font-size: 10.5pt;
+        line-height: 1.45;
+    }
+
+    #print-listing.markdown-body h1,
+    #print-listing.markdown-body h2,
+    #print-listing.markdown-body h3,
+    #print-listing.markdown-body h4,
+    #print-listing.markdown-body h5,
+    #print-listing.markdown-body h6,
+    #print-listing.markdown-body strong,
+    #print-listing.markdown-body th,
+    #print-listing.markdown-body a {
+        color: #000;
+    }
+
+    #print-listing.markdown-body h1,
+    #print-listing.markdown-body h2 {
+        border-bottom-color: #bbb;
+        break-after: avoid;
+    }
+
+    #print-listing.markdown-body h3,
+    #print-listing.markdown-body h4,
+    #print-listing.markdown-body h5,
+    #print-listing.markdown-body h6 {
+        break-after: avoid;
+    }
+
+    #print-listing.markdown-body a {
+        text-decoration: underline;
+    }
+
+    #print-listing.markdown-body code,
+    #print-listing.markdown-body pre,
+    #print-listing.markdown-body th {
+        background: #f2f2f2;
+    }
+
+    #print-listing.markdown-body pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        break-inside: avoid;
+    }
+
+    #print-listing.markdown-body table {
+        display: table;
+    }
+
+    #print-listing.markdown-body th,
+    #print-listing.markdown-body td {
+        border-color: #999;
+    }
+
+    #print-listing.markdown-body blockquote {
+        border-left-color: #999;
+        color: #333;
+    }
+
+    #print-listing.markdown-body hr {
+        background: #999;
+    }
+
+    #print-listing.markdown-body tr,
+    #print-listing.markdown-body blockquote {
+        break-inside: avoid;
+    }
+}
+
+.markdown-body .md-align-left {
+    text-align: left;
+}
+
+.markdown-body .md-align-center {
+    text-align: center;
+}
+
+.markdown-body .md-align-right {
+    text-align: right;
+}

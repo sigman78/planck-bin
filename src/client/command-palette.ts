@@ -19,6 +19,7 @@ import {
 import { parseQuery, rankItems } from './palette-search';
 import type { FindStatus } from './viewer-find';
 import type { HintStage } from './hint-stage';
+import type { PreviewIcon } from './preview/types';
 
 export interface PaletteHost {
   context(): CommandContext;
@@ -79,6 +80,8 @@ const ROOT_PLACEHOLDER = 'Command, :line or ?find';
 export class CommandPalette {
   private readonly hint: HTMLElement;
   private readonly saveBtn: HTMLButtonElement;
+  private readonly previewBtn: HTMLButtonElement;
+  private previewIcon: PreviewIcon | undefined;
   private readonly trigger: HTMLButtonElement;
   private readonly panel: HTMLElement;
   private readonly crumb: HTMLElement;
@@ -113,6 +116,7 @@ export class CommandPalette {
     const q = <T extends Element>(sel: string) => root.querySelector(sel) as T;
     this.hint = q('.island-hint');
     this.saveBtn = q('.island-save');
+    this.previewBtn = q('.island-preview');
     this.trigger = q('.island-trigger');
     this.panel = q('.island-panel');
     this.crumb = q('.island-crumb');
@@ -148,6 +152,11 @@ export class CommandPalette {
     this.promptInput.addEventListener('input', () => this.updatePromptHint());
     this.prompt.addEventListener('animationend', () => this.prompt.classList.remove('rejected'));
 
+    this.previewBtn.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      this.host.run('preview');
+    });
+
     this.saveBtn.addEventListener('click', (evt) => {
       evt.stopPropagation();
       this.host.run('save');
@@ -162,7 +171,8 @@ export class CommandPalette {
       if (this.isOpen() || this.isPrompting()) return;
       // A prompt button may have just folded the prompt: that click is not for the pill.
       if (this.prompt.contains(target)) return;
-      if (this.saveBtn.contains(target) || this.panel.contains(target)) return;
+      if (this.saveBtn.contains(target) || this.previewBtn.contains(target)) return;
+      if (this.panel.contains(target)) return;
       this.open();
     });
 
@@ -468,6 +478,32 @@ export class CommandPalette {
     } else {
       this.saveBtn.setAttribute('aria-label', spoken);
       this.saveBtn.title = spoken;
+    }
+  }
+
+  /**
+   * Preview chip: shown while a preview mode can present the paste on screen,
+   * pressed while the preview is on, busy while its renderer loads.
+   */
+  setPreviewChip(state: {
+    available: boolean;
+    on: boolean;
+    busy: boolean;
+    label: string;
+    icon?: PreviewIcon;
+  }): void {
+    const btn = this.previewBtn;
+    btn.disabled = !state.available;
+    btn.setAttribute('aria-hidden', String(!state.available));
+    btn.setAttribute('aria-pressed', String(state.on));
+    if (state.busy) btn.setAttribute('aria-busy', 'true');
+    else btn.removeAttribute('aria-busy');
+    btn.title = state.on ? 'Exit preview' : state.label;
+    btn.setAttribute('aria-label', btn.title);
+    // The icon belongs to the mode; it stays while the chip collapses away.
+    if (state.icon && state.icon !== this.previewIcon) {
+      this.previewIcon = state.icon;
+      btn.replaceChildren(previewIcon(state.icon));
     }
   }
 
@@ -788,6 +824,26 @@ const SAVE_ICON_PATHS: Record<SaveIcon, string[]> = {
   ],
   lock: ['M1.6 5.6 H8.4 V10.9 H1.6 Z', 'M3.1 5.6 V3.9 A1.9 1.9 0 0 1 6.9 3.9 V5.6'],
 };
+
+function previewIcon(icon: PreviewIcon): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'island-preview-icon');
+  svg.setAttribute('width', String(icon.width));
+  svg.setAttribute('height', String(icon.height));
+  svg.setAttribute('viewBox', `0 0 ${icon.width} ${icon.height}`);
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of icon.paths) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
 
 function saveIcon(kind: SaveIcon): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');

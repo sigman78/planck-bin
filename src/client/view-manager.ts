@@ -39,6 +39,8 @@ export class ViewManager {
   private viewer: HTMLPreElement;
   private viewerCode: HTMLElement;
   private gutter: HTMLDivElement;
+  /** Rendered preview (sanitized), shown instead of viewer and gutter while on. */
+  private preview: HTMLElement;
   private appName: string;
   private lineNumbers: boolean;
   private callbacks?: ViewCallbacks;
@@ -60,6 +62,7 @@ export class ViewManager {
     this.viewer = document.getElementById('viewer') as HTMLPreElement;
     this.viewerCode = this.viewer.querySelector('code') as HTMLElement;
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
+    this.preview = document.getElementById('preview')!;
     this.finder = new ViewerFind(this.viewerCode, this.viewer);
 
     this.lineNumbers = options.lineNumbers;
@@ -78,6 +81,7 @@ export class ViewManager {
   /** What to print: the viewer's or the editor's text; nothing behind a gate. */
   private printSource(): PrintSource | null {
     const numbers = this.lineNumbers;
+    if (this.isPreviewing()) return { text: '', numbers: false, rendered: this.preview };
     if (this.viewer.style.display !== 'none') {
       const text = this.viewerCode.textContent ?? '';
       if (text === '' || this.viewer.classList.contains('is-loading')) return null;
@@ -177,6 +181,7 @@ export class ViewManager {
    * Render full state including editor (for loading/reset)
    */
   renderFullState(state: Paste, mode: 'editing' | 'presenting', highlighted?: Highlighted): void {
+    this.setPreview(null);
     this.finder.clear();
     clearSyntax();
     this.editor.classList.remove('is-loading');
@@ -225,6 +230,7 @@ export class ViewManager {
   }
 
   renderLoadingState(): void {
+    this.setPreview(null);
     clearSyntax();
     this.editor.style.display = 'none';
     this.viewer.style.display = 'block';
@@ -232,6 +238,41 @@ export class ViewManager {
     this.viewerCode.textContent = '';
     this.gutter.textContent = '';
     this.resetLineHighlight();
+  }
+
+  /**
+   * Show a rendered preview in place of the viewer and gutter, or (null) go
+   * back to the source. The viewer keeps its text and highlights meanwhile.
+   * Callers pass only what renderPreview produced (sanitized).
+   */
+  setPreview(content: DocumentFragment | null): void {
+    const container = this.preview.parentElement!;
+    if (content === null) {
+      if (!this.isPreviewing()) return;
+      container.classList.remove('previewing');
+      this.preview.hidden = true;
+      this.preview.classList.remove('markdown-body');
+      this.preview.replaceChildren();
+      return;
+    }
+    this.finder.clear();
+    this.setPreviewPending(false);
+    this.preview.replaceChildren(content);
+    this.preview.classList.add('markdown-body');
+    this.preview.hidden = false;
+    container.classList.add('previewing');
+  }
+
+  /** Hide the source while a preview the page opens with is on its way. */
+  setPreviewPending(pending: boolean): void {
+    const container = this.preview.parentElement!;
+    container.classList.toggle('preview-pending', pending);
+    // From here on the client decides; the first-paint rules in preview.css stand down.
+    container.classList.add('preview-settled');
+  }
+
+  isPreviewing(): boolean {
+    return !this.preview.hidden;
   }
 
   /** Give focus back to the editor (after a question in the island), if it is showing. */
@@ -244,6 +285,7 @@ export class ViewManager {
    * since nothing of the paste has been fetched.
    */
   renderBurnGate(): void {
+    this.setPreview(null);
     this.finder.clear();
     this.editor.value = '';
     this.editor.style.display = 'none';
@@ -333,6 +375,19 @@ export class ViewManager {
       this.updateLineHighlight();
     }
     this.scrollToLine(target);
+  }
+
+  /**
+   * Presenting with a #L anchor: scroll its line to mid-viewport and return
+   * true. The browser's own fragment jump cannot be relied on here: the gutter
+   * links it targets are built by script, after it may have looked for them.
+   */
+  revealAnchorLine(): boolean {
+    if (this.viewer.style.display === 'none') return false;
+    const match = window.location.hash.match(/^#L(\d+)$/);
+    if (!match) return false;
+    this.scrollToLine(parseInt(match[1], 10));
+    return true;
   }
 
   /** Scroll the page so the given 1-based line sits mid-viewport. */
