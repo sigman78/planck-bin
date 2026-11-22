@@ -1,21 +1,34 @@
 /**
- * Document API routes: create, fetch (JSON), fetch (raw).
+ * Document API routes: create, fetch (JSON), fetch (raw), unlock.
  */
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { BURN_PENDING, type CreateOptions, type Env } from './types';
-import { LIFETIMES, isLifetimeId, type BurnPending, type SaveResponse } from '../shared/types';
+import { BURN_PENDING, type CreateOptions, type Env, type LockedStub } from './types';
+import {
+  LIFETIMES,
+  UNLOCK_ATTEMPTS,
+  isLifetimeId,
+  type BurnPending,
+  type LockSpec,
+  type SaveResponse,
+  type UnlockRejected,
+} from '../shared/types';
 import { createStore } from './storage';
 import { getServerConfig } from './config';
 import {
   countView,
+  fromStored,
+  isLockedStub,
+  isValidKey,
   isoOrNull,
   loadDocument,
+  lockedPending,
   toGetResponse,
   type LoadedDocument,
 } from './documents';
 import { etagMatches, isJsonContentType } from './http';
+import { isLockSpec, isUnlockToken, sameVerifier, verifierOf } from './locks';
 
 type AppContext = Context<{ Bindings: Env }>;
 
@@ -43,11 +56,15 @@ function applyDocumentCacheHeaders(c: AppContext, doc: LoadedDocument): void {
  * Burn-after-reading pastes: a GET without ?peek reads and deletes them, and
  * the response is never cached. HEAD and ?peek=1 leave them in place and get
  * `pending` instead (no content).
+ *
+ * Protected pastes always get `locked` (no content, never cached): only
+ * POST /documents/:id/unlock reads them.
  */
 async function serveDocument(
   c: AppContext,
   send: (doc: LoadedDocument) => Response,
   pending: (key: string) => Response,
+  locked: (key: string, stub: LockedStub) => Response,
   notFound: () => Response,
   failed: () => Response
 ): Promise<Response> {
@@ -56,6 +73,10 @@ async function serveDocument(
     const consume = c.req.method === 'GET' && c.req.query('peek') === undefined;
     const doc = await loadDocument(c, key, { consume });
     if (!doc) return notFound();
+    if (isLockedStub(doc)) {
+      c.header('Cache-Control', 'no-store');
+      return locked(key, doc);
+    }
     if (doc === BURN_PENDING || doc.burn) {
       c.header('Cache-Control', 'no-store');
       return doc === BURN_PENDING ? pending(key) : send(doc);
@@ -77,6 +98,7 @@ api.get('/documents/:id', (c) =>
     c,
     (doc) => c.json(toGetResponse(doc)),
     (key) => c.json({ key, burnPending: true } satisfies BurnPending),
+    (key, stub) => c.json(lockedPending(key, stub)),
     () => c.json({ message: 'Document not found' }, 404),
     () => c.json({ message: 'Error retrieving document' }, 500)
   )
@@ -91,6 +113,8 @@ api.get('/raw/:id', (c) =>
       c.text('Burn after reading: request without ?peek to read (and destroy) it', 200, {
         'Content-Type': 'text/plain; charset=utf-8',
       }),
+    // The server holds only ciphertext: there is nothing readable to send.
+    () => c.text('Protected paste: open it in a browser and enter the passphrase', 403),
     () => c.text('Document not found', 404),
     () => c.text('Error retrieving document', 500)
   )
@@ -137,6 +161,7 @@ api.post('/documents', async (c) => {
     }
 
     let content: string;
+    let lock: LockSpec | undefined;
 
     if (isJsonContentType(c.req.header('content-type'))) {
       let body: unknown;
@@ -154,6 +179,14 @@ api.post('/documents', async (c) => {
         return c.json({ message: 'JSON body must contain a string content field' }, 400);
       }
       content = (body as { content: string }).content;
+
+      const lockField = (body as { lock?: unknown }).lock;
+      if (lockField !== undefined) {
+        if (!isLockSpec(lockField)) {
+          return c.json({ message: 'lock must hold a base64url salt and token' }, 400);
+        }
+        lock = lockField;
+      }
     } else {
       content = await c.req.text();
     }
@@ -171,6 +204,10 @@ api.post('/documents', async (c) => {
       );
     }
 
+    if (lock) {
+      options.lock = { salt: lock.salt, verifier: await verifierOf(lock.token) };
+    }
+
     const { key, expiresAt } = await store.create(
       content,
       { strategy: config.keyStrategy, length: config.keyLength },
@@ -181,11 +218,66 @@ api.post('/documents', async (c) => {
       key,
       expiresAt: isoOrNull(expiresAt),
       ...(options.burn ? { burn: true } : {}),
+      ...(lock ? { locked: true } : {}),
     };
     return c.json(response, 201);
   } catch (error) {
     console.error('Error saving document:', error);
     return c.json({ message: 'Error saving document' }, 500);
+  }
+});
+
+/**
+ * Unlock a protected paste: { token } in, the stored (encrypted) document out.
+ * Every attempt is counted before it is checked; a right one is uncounted
+ * again, and the wrong one that reaches UNLOCK_ATTEMPTS deletes the paste.
+ */
+api.post('/documents/:id/unlock', async (c) => {
+  const key = c.req.param('id');
+  if (!isJsonContentType(c.req.header('content-type'))) {
+    return c.json({ message: 'Expected a JSON body' }, 415);
+  }
+  let token: unknown;
+  try {
+    token = (await c.req.json<{ token?: unknown } | null>())?.token;
+  } catch {
+    return c.json({ message: 'Invalid JSON body' }, 400);
+  }
+  if (!isUnlockToken(token)) return c.json({ message: 'token must be base64url' }, 400);
+
+  c.header('Cache-Control', 'no-store');
+  const notFound = () => c.json({ message: 'Document not found' }, 404);
+  if (!isValidKey(key)) return notFound();
+
+  try {
+    const store = createStore(c.env);
+    const candidate = await store.reserveUnlock(key, UNLOCK_ATTEMPTS);
+    if (!candidate) return notFound();
+
+    if (!sameVerifier(await verifierOf(token), candidate.verifier)) {
+      const attemptsLeft = Math.max(0, UNLOCK_ATTEMPTS - candidate.failures);
+      if (attemptsLeft > 0) {
+        return c.json({ message: 'Wrong passphrase', attemptsLeft } satisfies UnlockRejected, 403);
+      }
+      await store.remove(key);
+      const gone: UnlockRejected = {
+        message: 'Too many wrong passphrases: the paste is deleted',
+        attemptsLeft,
+      };
+      return c.json(gone, 410);
+    }
+
+    if (candidate.burn) {
+      // One statement picks the only reader, as with plain burn pastes.
+      const taken = await store.takeLocked(key);
+      return taken ? c.json(toGetResponse(fromStored(key, taken, true))) : notFound();
+    }
+    // Awaited: a lost release would leave the right passphrase spending attempts.
+    await store.releaseUnlock(key);
+    return c.json(toGetResponse(fromStored(key, candidate, false)));
+  } catch (error) {
+    console.error('Error unlocking document:', error);
+    return c.json({ message: 'Error unlocking document' }, 500);
   }
 });
 
@@ -200,4 +292,5 @@ function methodNotAllowed(allow: string) {
 
 api.all('/documents', methodNotAllowed('POST'));
 api.all('/documents/:id', methodNotAllowed('GET, HEAD'));
+api.all('/documents/:id/unlock', methodNotAllowed('POST'));
 api.all('/raw/:id', methodNotAllowed('GET, HEAD'));

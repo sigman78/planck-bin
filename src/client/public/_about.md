@@ -24,6 +24,8 @@ press Enter.
 - **Recent pastes** - pastes you saved or opened in this browser (stored only locally)
 - **Expires** - how long new pastes are kept (while editing)
 - **Burn after reading** - make the next paste readable only once (while editing)
+- **Protect with passphrase** - encrypt the next paste (while editing)
+- **Copy passphrase** - copy the passphrase of a protected paste you just saved
 
 ## Keyboard Shortcuts
 
@@ -61,10 +63,19 @@ the link is asked first; clicking **Open and burn** shows the paste and deletes 
 and the link stops working. Nothing of the paste reaches the browser before that click. Link previews in chat apps do not count as a read. Reading
 it through `/raw/` or the API deletes it right away.
 
+## Protected Pastes
+
+Run **Protect with passphrase** before saving to encrypt the paste in your browser. It proposes a
+four-word passphrase: press Enter to use it, or type your own. After saving it is shown once
+more to copy; send it separately from the link. Whoever opens the link has to enter it; case and the
+separators between words do not matter. After 10 wrong passphrases the paste is deleted. Lost
+passphrases cannot be recovered: the server never sees them.
+
 ## Privacy
 
 There should be no expectation of privacy. Post things at your own risk. Burn after reading
-limits how long a paste lives, but pastes are not encrypted.
+limits how long a paste lives. Only protected pastes are encrypted; all others are stored as
+plain text.
 Not responsible for any loss of data or removed pastes.
 
 ## Technology

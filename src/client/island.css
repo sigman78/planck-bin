@@ -254,7 +254,7 @@
     }
 }
 
-/* --- burn prompt ---------------------------------------------------------- */
+/* --- prompt (burn reveal, passphrase) ------------------------------------ */
 
 /* Same morph as the palette panel; it cannot be dismissed, only answered. */
 .island-prompt {
@@ -271,6 +271,11 @@
     transition:
         opacity 0.14s ease,
         transform 0.3s var(--island-spring);
+}
+
+/* Fits the longest four-word passphrase (39 characters) on one line. */
+.island-prompt.wide {
+    width: min(380px, calc(100vw - 24px));
 }
 
 #island.prompting .island-prompt {
@@ -298,6 +303,72 @@
     margin-top: 6px !important;
     font-size: 13px;
     line-height: 1.45;
+}
+
+/* A generated passphrase, shown once after saving: easy to read and to select. */
+.island-prompt-secret {
+    margin-top: 10px !important;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--color-island-chip);
+    color: var(--color-logo);
+    font: 14px var(--font-editor);
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+
+.island-prompt-input {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 10px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    outline: 0;
+    background: var(--color-island-chip);
+    color: var(--color-logo);
+    font: 13px var(--font-editor);
+    caret-color: var(--color-accent);
+}
+
+/* Under the field; keeps one line of height when empty so the prompt never resizes. */
+.island-prompt-hint {
+    min-height: 1.45em;
+    margin-top: 6px !important;
+    color: var(--color-placeholder);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.island-prompt-input[hidden],
+.island-prompt-secret[hidden],
+.island-prompt-hint[hidden] {
+    display: none;
+}
+
+.island-prompt-input:focus-visible {
+    border-color: var(--color-accent);
+}
+
+.island-prompt-input::placeholder {
+    color: var(--color-placeholder);
+}
+
+/* Wrong passphrase: a short sideways shake (off with reduced motion). */
+.island-prompt.rejected {
+    animation: island-prompt-shake 0.32s ease-in-out;
+}
+
+@keyframes island-prompt-shake {
+    20%,
+    60% {
+        translate: -5px 0;
+    }
+    40%,
+    80% {
+        translate: 5px 0;
+    }
 }
 
 .island-prompt-actions {

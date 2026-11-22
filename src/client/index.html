@@ -42,10 +42,13 @@
 				</div>
 				<div id="island-list" class="island-list" role="listbox" aria-label="Commands"></div>
 			</div>
-			<!-- Unread burn-after-reading paste: the pill morphs into this question. -->
+			<!-- Questions (burn reveal, passphrase): the pill morphs into this; the app fills it in. -->
 			<div class="island-prompt" role="alertdialog" aria-labelledby="island-prompt-title" aria-describedby="island-prompt-text">
 				<p class="island-prompt-title" id="island-prompt-title">Burn after reading</p>
 				<p class="island-prompt-text" id="island-prompt-text">This paste can be read once. Opening it deletes it from the server for good.</p>
+				<p class="island-prompt-secret" hidden></p>
+				<input class="island-prompt-input" type="text" hidden autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore data-lpignore="true" />
+				<p class="island-prompt-hint" aria-live="polite" hidden></p>
 				<div class="island-prompt-actions">
 					<button type="button" class="island-prompt-cancel">New paste</button>
 					<button type="button" class="island-prompt-confirm">Open and burn</button>

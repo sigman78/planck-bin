@@ -16,6 +16,8 @@ export class Paste {
   language?: string;
   frozen: boolean = false;
   burn?: BurnState;
+  /** Protected paste: encrypted on the server, shown here decrypted (or behind the lock gate). */
+  locked: boolean = false;
 
   get isLoaded(): boolean {
     return this.key !== undefined;
@@ -27,6 +29,7 @@ export class Paste {
     this.language = undefined;
     this.frozen = false;
     this.burn = undefined;
+    this.locked = false;
   }
 
   apply(data: {
@@ -35,11 +38,13 @@ export class Paste {
     language?: string;
     frozen?: boolean;
     burn?: BurnState;
+    locked?: boolean;
   }): void {
     this.content = data.content;
     this.key = data.key;
     this.language = data.language;
     this.frozen = data.frozen ?? false;
     this.burn = data.burn;
+    this.locked = data.locked ?? false;
   }
 }

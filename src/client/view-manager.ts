@@ -234,9 +234,14 @@ export class ViewManager {
     this.resetLineHighlight();
   }
 
+  /** Give focus back to the editor (after a question in the island), if it is showing. */
+  focusEditor(): void {
+    if (this.editor.style.display !== 'none') this.editor.focus({ preventScroll: true });
+  }
+
   /**
-   * Behind the burn prompt (the island asks): a blank page, since nothing of
-   * the paste has been fetched.
+   * Behind the burn or passphrase prompt (the island asks): a blank page,
+   * since nothing of the paste has been fetched.
    */
   renderBurnGate(): void {
     this.finder.clear();

@@ -14,7 +14,7 @@ export interface PaletteItem {
   label: string;
   hint?: string;
   /** Monochrome state icon shown in place of the hint (see saveIcon). */
-  icon?: 'clock' | 'burn';
+  icon?: 'clock' | 'burn' | 'lock';
   keywords?: string[];
 }
 
@@ -40,6 +40,12 @@ export interface CommandContext {
   burnNext?: boolean;
   /** Lifetime the next save asks for, e.g. "1 week" or "default". */
   lifetimeLabel?: string;
+  /** The paste on screen is protected: behind the passphrase gate, or opened. */
+  lock?: 'pending' | 'open';
+  /** The next save is protected with a passphrase. */
+  lockNext?: boolean;
+  /** The passphrase of the paste on screen is known here (its creator, this tab). */
+  hasPassphrase?: boolean;
 }
 
 /**
@@ -73,6 +79,8 @@ interface CommandDef {
 const presenting = (ctx: CommandContext) => ctx.mode === 'presenting';
 const editing = (ctx: CommandContext) => ctx.mode === 'editing';
 const always = () => true;
+/** Behind a question (burn reveal, passphrase): nothing of the paste is loaded. */
+const gated = (ctx: CommandContext) => ctx.burn === 'pending' || ctx.lock === 'pending';
 
 const COMMANDS: CommandDef[] = [
   {
@@ -101,6 +109,13 @@ const COMMANDS: CommandDef[] = [
     available: editing,
   },
   {
+    id: 'lock',
+    label: (ctx) => (ctx.lockNext ? "Don't protect with passphrase" : 'Protect with passphrase'),
+    keywords: ['password', 'passphrase', 'encrypt', 'private', 'secret', 'lock', 'own', 'custom'],
+    icon: (ctx) => (ctx.lockNext ? 'lock' : undefined),
+    available: editing,
+  },
+  {
     id: 'new',
     label: 'New paste',
     keywords: ['clear', 'reset', 'blank'],
@@ -112,7 +127,7 @@ const COMMANDS: CommandDef[] = [
     label: 'Duplicate & edit',
     keywords: ['fork', 'copy', 'edit'],
     key: { code: 'KeyD', label: 'D' },
-    available: (ctx) => presenting(ctx) && !ctx.frozen && ctx.burn !== 'pending',
+    available: (ctx) => presenting(ctx) && !ctx.frozen && !gated(ctx),
   },
   {
     id: 'copy-link',
@@ -123,12 +138,19 @@ const COMMANDS: CommandDef[] = [
     available: (ctx) => presenting(ctx) && ctx.burn !== 'burned',
   },
   {
+    id: 'copy-passphrase',
+    label: 'Copy passphrase',
+    keywords: ['password', 'secret', 'clipboard', 'share'],
+    available: (ctx) => presenting(ctx) && ctx.hasPassphrase === true && ctx.burn !== 'burned',
+  },
+  {
     id: 'raw',
     label: 'View raw',
     keywords: ['plain', 'text', 'download'],
     key: { code: 'KeyR', label: 'R' },
     // /raw reads a burn paste: it would destroy the creator's link, or 404 once burned.
-    available: (ctx) => presenting(ctx) && !ctx.frozen && ctx.hasKey && !ctx.burn,
+    // A protected one has no readable form on the server.
+    available: (ctx) => presenting(ctx) && !ctx.frozen && ctx.hasKey && !ctx.burn && !ctx.lock,
   },
   {
     id: 'find',
@@ -136,7 +158,7 @@ const COMMANDS: CommandDef[] = [
     keywords: ['search'],
     key: { code: 'KeyF', label: 'F' },
     prefill: '?',
-    available: (ctx) => presenting(ctx) && ctx.burn !== 'pending',
+    available: (ctx) => presenting(ctx) && !gated(ctx),
   },
   {
     id: 'goto-line',
@@ -152,7 +174,7 @@ const COMMANDS: CommandDef[] = [
     keywords: ['syntax', 'highlight', 'mode'],
     key: { code: 'KeyL', label: 'L' },
     submenu: true,
-    available: (ctx) => presenting(ctx) && ctx.burn !== 'pending',
+    available: (ctx) => presenting(ctx) && !gated(ctx),
   },
   {
     id: 'recent',

@@ -21,7 +21,14 @@ import {
   type Highlighted,
 } from './highlight-config';
 import { hasEmbeddedDocument } from './embedded-document';
-import { BurnPendingError } from './storage';
+import { BurnPendingError, LockedError, UnlockRejectedError } from './storage';
+import {
+  MIN_PASSPHRASE_LENGTH,
+  generatePassphrase,
+  isWeakerThanSuggestion,
+  loadWordlist,
+  normalizePassphrase,
+} from './lock-crypto';
 import { LifetimeStore } from './lifetime-store';
 import { LIFETIMES, LIFETIME_LABELS, isLifetimeId, type LifetimeId } from '../shared/types';
 import type { PaletteItem } from './commands';
@@ -41,6 +48,15 @@ const FIRST_HINT_MS = 8000;
 const CLEAR_RECENT_ID = '/clear';
 /** Expires submenu item for the server default lifetime (never a preset id). */
 const DEFAULT_LIFETIME_ID = 'default';
+/** Recent-list preview of a protected paste: its text never goes to localStorage. */
+const LOCKED_PREVIEW = 'Protected paste';
+
+/** A protected paste behind the passphrase gate. */
+interface PendingLock {
+  path: ParsedPath;
+  salt: string;
+  burn: boolean;
+}
 type ActivityState = 'idle' | 'loading' | 'saving';
 
 export interface AppConfig {
@@ -73,6 +89,12 @@ export class AppController {
   private burnNext = false;
   /** The unread burn paste behind the reveal gate. */
   private pendingBurn: ParsedPath | null = null;
+  /** Passphrase (normalized) the next save is protected with; resets after each save. */
+  private lockNext: string | null = null;
+  /** The protected paste behind the passphrase gate. */
+  private pendingLock: PendingLock | null = null;
+  /** Passphrases of protected pastes saved in this tab, for "Copy passphrase". Memory only. */
+  private passphrases = new Map<string, string>();
 
   // State machine
   private viewMode: ViewMode = 'editing';
@@ -114,6 +136,9 @@ export class AppController {
         burn: this.document.burn,
         burnNext: this.burnNext,
         lifetimeLabel: this.lifetime ? LIFETIME_LABELS[this.lifetime] : 'default',
+        lock: this.document.locked ? (this.pendingLock ? 'pending' : 'open') : undefined,
+        lockNext: this.lockNext !== null,
+        hasPassphrase: this.document.key !== undefined && this.passphrases.has(this.document.key),
       }),
       run: (id) => this.runCommand(id),
       submenu: (id) => this.submenuItems(id),
@@ -221,17 +246,24 @@ export class AppController {
       this.activity = 'saving';
       this.notify.progressStart();
 
+      const passphrase = this.lockNext ?? undefined;
       const result = await this.session.save(this.document.content, {
         expires: this.lifetime ?? undefined,
         burn: this.burnNext,
+        passphrase,
       });
       this.document.apply(result.paste);
       this.draft.clear();
       const burn = result.paste.burn !== undefined;
       this.burnNext = false;
+      this.lockNext = null;
+      if (passphrase !== undefined) this.passphrases.set(result.paste.key, passphrase);
       // A burn paste is one-shot: no preview of it is kept in localStorage.
-      if (!burn) this.recent.record(result.paste.key, result.canonicalPath, content);
-      if (burn) this.notify.toast('Burn link ready: it can be opened once');
+      if (!burn) this.recordRecent(result.paste.key, result.canonicalPath);
+      // A protected save says so in its passphrase prompt instead.
+      if (burn && passphrase === undefined) {
+        this.notify.toast('Burn link ready: it can be opened once');
+      }
 
       this.activity = 'idle';
       setTimeout(() => {
@@ -244,6 +276,7 @@ export class AppController {
         highlighted: result.highlighted,
         scrollY: this.scrollToTopOnSave ? 0 : null,
       });
+      if (passphrase !== undefined) this.showPassphrase(passphrase, burn);
     } catch (err) {
       console.error('Save failed:', err);
 
@@ -271,6 +304,7 @@ export class AppController {
     if (this.isBusy) return;
 
     this.pendingBurn = null;
+    this.pendingLock = null;
     // A server-rendered page already shows the text: don't blank it while "loading".
     const hideWhileLoading = this.isFirstLoad && !hasEmbeddedDocument(path.key);
     this.isFirstLoad = false;
@@ -285,7 +319,7 @@ export class AppController {
       const result = await this.session.load(path);
       this.document.apply(result.paste);
       if (!result.paste.frozen && !result.paste.burn) {
-        this.recent.record(result.paste.key, result.canonicalPath, result.paste.content);
+        this.recordRecent(result.paste.key, result.canonicalPath);
       }
 
       this.activity = 'idle';
@@ -311,6 +345,10 @@ export class AppController {
       this.activity = 'idle';
       if (err instanceof BurnPendingError) {
         this.showBurnGate(path);
+        return;
+      }
+      if (err instanceof LockedError) {
+        this.showLockGate({ path, salt: err.salt, burn: err.burn });
         return;
       }
       this.showLoadFailure(path, err);
@@ -342,9 +380,203 @@ export class AppController {
     this.view.renderBurnGate();
     this.syncChrome();
     this.palette.showPrompt({
+      title: 'Burn after reading',
+      text: 'This paste can be read once. Opening it deletes it from the server for good.',
+      confirmLabel: 'Open and burn',
+      busyLabel: 'Opening...',
+      cancelLabel: 'New paste',
       confirm: () => void this.revealBurn(),
       cancel: () => this.newDocument(true),
     });
+  }
+
+  /** A protected paste: ask for the passphrase; nothing of it is fetched until then. */
+  private showLockGate(pending: PendingLock): void {
+    this.pendingLock = pending;
+    this.document.reset();
+    this.document.key = pending.path.key;
+    this.document.locked = true;
+    this.viewMode = 'presenting';
+    this.palette.close(false);
+    this.hasRendered = true;
+    this.view.renderBurnGate();
+    this.syncChrome();
+    this.palette.showPrompt({
+      title: 'Protected paste',
+      text: pending.burn
+        ? 'Enter the passphrase. Opening the paste also deletes it from the server.'
+        : 'Enter the passphrase to open it.',
+      input: { label: 'Passphrase', placeholder: 'passphrase' },
+      confirmLabel: pending.burn ? 'Unlock and burn' : 'Unlock',
+      busyLabel: 'Unlocking...',
+      cancelLabel: 'New paste',
+      confirm: (value) => void this.unlockPaste(value),
+      cancel: () => {
+        // Leaving the gate: a "Wrong passphrase" toast no longer applies.
+        this.notify.dismiss();
+        this.newDocument(true);
+      },
+    });
+  }
+
+  /** Try the passphrase on the paste behind the gate. */
+  private async unlockPaste(passphrase: string): Promise<void> {
+    const pending = this.pendingLock;
+    if (this.isBusy || !pending) return;
+    if (normalizePassphrase(passphrase) === '') {
+      this.palette.rejectPrompt();
+      return;
+    }
+
+    const { path } = pending;
+    this.activity = 'loading';
+    this.palette.setPromptBusy(true);
+    this.notify.progressStart();
+    try {
+      const result = await this.session.unlock(path, pending.salt, passphrase);
+      this.pendingLock = null;
+      this.document.apply(result.paste);
+      this.activity = 'idle';
+      this.notify.progressDone();
+      // A "Wrong passphrase" toast from an earlier try is answered now.
+      this.notify.dismiss();
+      this.palette.hidePrompt();
+      if (result.paste.burn) this.recent.remove(path.key);
+      else this.recordRecent(result.paste.key, result.canonicalPath);
+      if (!path.ext && result.canonicalPath !== window.location.pathname) {
+        this.navigation.replacePath(result.canonicalPath);
+      }
+      this.transitionToView('presenting', { highlighted: result.highlighted, scrollY: 0 });
+      if (result.paste.burn) {
+        this.notify.toast('Destroyed on the server: this tab holds the only copy');
+      }
+    } catch (err) {
+      this.activity = 'idle';
+      this.notify.progressDone();
+      if (err instanceof UnlockRejectedError && err.attemptsLeft > 0) {
+        this.palette.rejectPrompt();
+        const left = err.attemptsLeft;
+        this.notify.toast(
+          `Wrong passphrase: ${left} ${left === 1 ? 'attempt' : 'attempts'} left`,
+          'error'
+        );
+        return;
+      }
+      if (err instanceof UnlockRejectedError) {
+        this.pendingLock = null;
+        this.palette.hidePrompt();
+        this.recent.remove(path.key);
+        this.document.reset();
+        this.navigation.replacePath('/');
+        this.notify.toast('Too many wrong passphrases: the paste is deleted', 'error');
+        this.transitionToView('editing');
+        return;
+      }
+      if (err instanceof Error && err.message === 'Document not found') {
+        this.pendingLock = null;
+        this.palette.hidePrompt();
+        this.showLoadFailure(path, err);
+        return;
+      }
+      // The server took the passphrase, but the text does not decrypt with it.
+      if (err instanceof DOMException && err.name === 'OperationError') {
+        console.error('Decrypt failed:', err);
+        this.palette.setPromptBusy(false);
+        this.notify.toast('This paste is damaged and cannot be decrypted.', 'error');
+        return;
+      }
+      console.error('Unlock failed:', err);
+      this.palette.setPromptBusy(false);
+      this.notify.toast('Could not reach the server. Try again.', 'error');
+    }
+  }
+
+  /** Right after a protected save: show the passphrase as set, offer to copy it. */
+  private showPassphrase(passphrase: string, burn: boolean): void {
+    this.palette.showPrompt({
+      title: 'Passphrase',
+      text: burn
+        ? 'The link opens once, with this passphrase. Send them separately.'
+        : 'The link opens with this passphrase. Send them separately.',
+      secret: passphrase,
+      wide: true,
+      confirmLabel: 'Copy passphrase',
+      cancelLabel: 'Done',
+      dismissible: true,
+      confirm: () => {
+        this.palette.hidePrompt();
+        this.copyPassphrase();
+      },
+      cancel: () => this.palette.hidePrompt(),
+    });
+  }
+
+  /**
+   * Pick the next save's passphrase: a generated one, prefilled and selected,
+   * to accept with Enter, edit, or replace by typing.
+   */
+  private async askPassphrase(): Promise<void> {
+    let suggestion = '';
+    try {
+      suggestion = generatePassphrase(await loadWordlist());
+    } catch (err) {
+      // Offline before the list was ever loaded: the user can still type one.
+      console.error('Wordlist failed to load:', err);
+    }
+    if (this.viewMode !== 'editing' || this.isBusy) return;
+    this.palette.showPrompt({
+      title: 'Passphrase',
+      text:
+        `Use this one or type your own: at least ${MIN_PASSPHRASE_LENGTH} characters. ` +
+        'Case, spaces and dashes do not matter.',
+      input: {
+        label: 'Passphrase',
+        placeholder: 'passphrase',
+        value: suggestion,
+        hint: (value) =>
+          suggestion && isWeakerThanSuggestion(value, suggestion)
+            ? 'Shorter than the suggestion: easier to guess'
+            : '',
+      },
+      wide: true,
+      confirmLabel: 'Use',
+      cancelLabel: 'Cancel',
+      dismissible: true,
+      confirm: (value) => {
+        if (normalizePassphrase(value).length < MIN_PASSPHRASE_LENGTH) {
+          this.palette.rejectPrompt();
+          this.notify.toast(`Use at least ${MIN_PASSPHRASE_LENGTH} characters`, 'error');
+          return;
+        }
+        this.lockNext = normalizePassphrase(value);
+        this.closeQuestion();
+        this.syncChrome();
+        this.notify.toast('Next save is protected', 'info', { brief: true });
+      },
+      cancel: () => this.closeQuestion(),
+    });
+  }
+
+  /** Fold a dismissible question and give the editor its focus back. */
+  private closeQuestion(): void {
+    this.palette.hidePrompt();
+    this.view.focusEditor();
+  }
+
+  private copyPassphrase(): void {
+    const key = this.document.key;
+    const passphrase = key !== undefined ? this.passphrases.get(key) : undefined;
+    if (passphrase === undefined) return;
+    navigator.clipboard.writeText(passphrase).then(
+      () => this.notify.toast('Passphrase copied to clipboard'),
+      () => this.notify.toast('Could not copy the passphrase.', 'error')
+    );
+  }
+
+  /** Remember a paste in the recent list; a protected one without its text. */
+  private recordRecent(key: string, path: string): void {
+    const content = this.document.locked ? LOCKED_PREVIEW : this.document.content;
+    this.recent.record(key, path, content);
   }
 
   /** Read (and so destroy) the burn paste behind the gate. */
@@ -391,6 +623,7 @@ export class AppController {
   ): void {
     this.viewMode = mode;
     this.pendingBurn = null;
+    this.pendingLock = null;
     this.palette.hidePrompt();
     // Close first: renderFullState may move focus into the editor.
     this.palette.close(false);
@@ -441,12 +674,13 @@ export class AppController {
   private syncChrome(): void {
     this.palette.setMode(this.viewMode);
     this.palette.setSaveEnabled(this.canSave());
-    // One icon on the chip: burn overrides the lifetime clock; details are spoken.
+    // One icon on the chip: lock, then burn, then the lifetime clock; details are spoken.
     let spoken = 'Save';
     if (this.lifetime === 'never') spoken += ', permanent';
     else if (this.lifetime) spoken += `, expires in ${LIFETIME_LABELS[this.lifetime]}`;
     if (this.burnNext) spoken += ', burn after reading';
-    const icon = this.burnNext ? 'burn' : this.lifetime ? 'clock' : null;
+    if (this.lockNext) spoken += ', protected with a passphrase';
+    const icon = this.lockNext ? 'lock' : this.burnNext ? 'burn' : this.lifetime ? 'clock' : null;
     this.palette.setSaveLabel(spoken, icon);
   }
 
@@ -480,6 +714,14 @@ export class AppController {
         return this.zoom('reset');
       case 'about':
         return this.openPath('/about.md');
+      case 'lock':
+        if (this.lockNext === null) return void this.askPassphrase();
+        this.lockNext = null;
+        this.syncChrome();
+        this.notify.toast('Passphrase protection off', 'info', { brief: true });
+        return;
+      case 'copy-passphrase':
+        return this.copyPassphrase();
       case 'burn':
         this.burnNext = !this.burnNext;
         this.syncChrome();
@@ -554,7 +796,7 @@ export class AppController {
   /** Re-highlight the presented paste with another language ('' = plain). */
   private setLanguage(id: string): void {
     if (this.viewMode !== 'presenting' || this.isBusy || !this.document.key) return;
-    if (this.document.burn === 'pending') return;
+    if (this.document.burn === 'pending' || this.pendingLock) return;
 
     const result = highlightContent(this.document.content, id === '' ? 'txt' : id);
     this.document.language = id === '' ? undefined : id;
@@ -562,7 +804,7 @@ export class AppController {
     const path = buildPath(this.document.key, ext);
     this.navigation.replacePath(path + window.location.hash, this.navigation.currentState());
     if (!this.document.frozen && !this.document.burn) {
-      this.recent.record(this.document.key, path, this.document.content);
+      this.recordRecent(this.document.key, path);
     }
     this.view.renderFullState(this.document, 'presenting', result.highlighted);
     this.syncChrome();
@@ -616,7 +858,8 @@ export class AppController {
       this.viewMode === 'presenting' &&
       this.activity === 'idle' &&
       !this.document.frozen &&
-      this.document.burn !== 'pending'
+      this.document.burn !== 'pending' &&
+      !this.pendingLock
     ) {
       const content = this.document.content;
       this.document.reset();
@@ -647,6 +890,7 @@ export class AppController {
       this.activity === 'idle' &&
       !this.document.frozen &&
       !this.document.burn &&
+      !this.document.locked &&
       this.document.key
     ) {
       window.open(`/raw/${this.document.key}`, '_blank', 'noopener');
