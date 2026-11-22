@@ -49,6 +49,14 @@ export class Notifications {
     );
   }
 
+  /** Hide the toast now, e.g. an error the user has just resolved. */
+  dismiss(): void {
+    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
+    this.toastTimer = null;
+    this.toastSeq++; // cancels a deferred re-announce
+    document.getElementById('toast')!.classList.remove('visible');
+  }
+
   progressStart(): void {
     const bar = document.getElementById('progress-bar')!;
     bar.classList.remove('done', 'clear');

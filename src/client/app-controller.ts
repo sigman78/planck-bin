@@ -420,7 +420,11 @@ export class AppController {
       busyLabel: 'Unlocking...',
       cancelLabel: 'New paste',
       confirm: (value) => void this.unlockPaste(value),
-      cancel: () => this.newDocument(true),
+      cancel: () => {
+        // Leaving the gate: a "Wrong passphrase" toast no longer applies.
+        this.notify.dismiss();
+        this.newDocument(true);
+      },
     });
   }
 
@@ -443,6 +447,8 @@ export class AppController {
       this.document.apply(result.paste);
       this.activity = 'idle';
       this.notify.progressDone();
+      // A "Wrong passphrase" toast from an earlier try is answered now.
+      this.notify.dismiss();
       this.palette.hidePrompt();
       if (result.paste.burn) this.recent.remove(path.key);
       else this.recordRecent(result.paste.key, result.canonicalPath);

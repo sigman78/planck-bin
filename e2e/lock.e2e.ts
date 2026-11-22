@@ -73,6 +73,8 @@ test.describe('protected pastes', () => {
     await page.locator(CONFIRM).click();
     await expect(page.locator(S.viewer)).toContainText(TEXT);
     await expect(page.locator(S.island)).not.toHaveClass(/prompting/);
+    // The earlier "Wrong passphrase" toast goes with the prompt, not on its own timer.
+    await expect(page.locator(S.toast)).not.toHaveClass(/visible/);
     await expectCommand(page, 'Copy passphrase', false);
   });
 
@@ -131,5 +133,21 @@ test.describe('protected pastes', () => {
     await expect(page.locator(S.editor)).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/');
     expect(store.get(key)).toBeUndefined();
+  });
+
+  test('New paste after a wrong passphrase clears its toast', async ({ page }) => {
+    const store = await setupMockApi(page);
+    await typePaste(page);
+    await setOwnPassphrase(page, 'correct horse battery');
+    const key = await save(page, store);
+
+    await page.goto(`/${key}`);
+    await page.locator(FIELD).fill('wrong guess');
+    await page.keyboard.press('Enter');
+    await expect(page.locator(S.toast)).toContainText('Wrong passphrase');
+    await page.locator(CANCEL).click();
+    await expect(page.locator(S.editor)).toBeVisible();
+    await expect(page.locator(S.toast)).not.toHaveClass(/visible/);
+    expect(store.isLocked(key)).toBe(true);
   });
 });
