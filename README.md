@@ -168,8 +168,8 @@ stolen database still needs an offline search through PBKDF2 per guess. The serv
 the page's JavaScript, so this protects against database leaks and passive operators, not
 against a modified deployment.
 
-Markdown pastes get a **Preview** chip in the pill (also **Preview markdown** in the palette,
-Alt+Shift+V). It renders CommonMark with GitHub tables, strikethrough, autolinks and task lists
+Markdown pastes get a preview chip in the pill, marked with the markdown logo (also **Preview
+markdown** / **Exit preview** in the palette, Alt+Shift+V). It renders CommonMark with GitHub tables, strikethrough, autolinks and task lists
 using [markdown-it](https://github.com/markdown-it/markdown-it); the result goes through
 [DOMPurify](https://github.com/cure53/DOMPurify) before it reaches the page. Raw HTML in the paste
 shows as text. Images show as links, since the CSP blocks remote images. Only absolute http(s) and
@@ -177,6 +177,11 @@ mailto links are kept; they open in a new tab without a referrer. The renderer i
 use. `#preview` in the URL opens a paste in preview; the about page opens in preview by default
 and `#source` shows its text. Find and go to line return to the source. Preview modes for other
 formats can be added in `src/client/preview/registry.ts`.
+
+Known limitation: a `#preview` link can show the source for a frame or two before the preview
+replaces it. The server never sees the hash, so it cannot hide the server-rendered text the way it
+does for the about page. A one-line inline script in `<head>` (allowed in the CSP by its hash) fixes
+this and was tried, but is left out for now.
 
 Printing (the browser's Print) produces a plain black-and-white source listing: numbered lines,
 long lines wrapped under their own number, and the paste address, line count and page numbers in

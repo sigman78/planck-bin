@@ -8,17 +8,10 @@
  *   (index.html), robots.txt and the hashed bundles.
  */
 
-/**
- * The one inline script, in the head of index.html: it marks a #preview link
- * before first paint so the source never flashes. Allowed by hash only; a test
- * checks the hash against the script.
- */
-export const BOOT_SCRIPT_HASH = 'sha256-9f45nv1P2Rh58qY8kLUnRqYE+kdHgwlzDtrz48wIUd0=';
-
 export const SECURITY_HEADERS = {
   'Content-Security-Policy':
     "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; " +
-    `form-action 'self'; script-src 'self' '${BOOT_SCRIPT_HASH}'; style-src 'self' 'unsafe-inline'; ` +
+    "form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; connect-src 'self'",
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',

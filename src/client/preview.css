@@ -19,11 +19,10 @@
 /*
  * First paint, before any script runs: a paste the server marked as opening in
  * preview keeps its server-rendered source hidden. The client then sets
- * .preview-settled. A #preview link does the same through .preview-boot,
- * which the inline script in index.html sets (the server never sees the hash).
+ * .preview-settled. A #preview link cannot get the same: the server never sees
+ * the hash, so its source can paint for a frame or two before the client hides it.
  */
-#editor-container:not(.preview-settled) #viewer[data-preview-default],
-html.preview-boot #editor-container:not(.preview-settled) #viewer {
+#editor-container:not(.preview-settled) #viewer[data-preview-default] {
     display: none !important;
 }
 

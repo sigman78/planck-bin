@@ -51,8 +51,8 @@ describe('renderDocumentPage', () => {
     const data = dom.getElementById(EMBEDDED_DOCUMENT_ID)!;
     expect(data.getAttribute('type')).toBe('application/json');
     expect(JSON.parse(data.textContent!)).toEqual(doc);
-    // Nothing escaped the data element: only the shell's boot and module scripts plus ours.
-    expect(scripts).toHaveLength(3);
+    // Nothing escaped the data element: only the shell's module script plus ours.
+    expect(scripts).toHaveLength(2);
   });
 
   it('paints the text into the visible viewer (CR normalized by the parser)', () => {
