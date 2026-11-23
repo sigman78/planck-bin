@@ -1,4 +1,10 @@
-import { availableCommands, shortcutCommand, type CommandContext, type KeyLike } from '../commands';
+import {
+  availableCommands,
+  shortcutCommand,
+  shortcutLabel,
+  type CommandContext,
+  type KeyLike,
+} from '../commands';
 
 const base: CommandContext = {
   mode: 'presenting',
@@ -135,6 +141,26 @@ describe('availableCommands', () => {
     });
     expect(hints(true).duplicate).toBe('Opt+Shift+D');
     expect(hints(false).about).toBeUndefined();
+  });
+
+  it('describes shortcuts as modifier keys plus a main key, with the Mac keys on Mac', () => {
+    const shortcuts = (isMac: boolean) =>
+      Object.fromEntries(availableCommands({ ...base, isMac }).map((c) => [c.id, c.shortcut]));
+    expect(shortcuts(false).save).toEqual({ mods: ['ctrl'], key: 'S' });
+    expect(shortcuts(true).save).toEqual({ mods: ['cmd'], key: 'S' });
+    expect(shortcuts(false).new).toEqual({ mods: ['alt', 'shift'], key: 'P' });
+    expect(shortcuts(true).new).toEqual({ mods: ['opt', 'shift'], key: 'P' });
+    expect(shortcuts(false)['zoom-in']).toEqual({ mods: ['alt', 'shift'], key: '=' });
+    // A state hint (the value in effect) is text, not a shortcut.
+    expect(shortcuts(false).theme).toBeUndefined();
+    expect(shortcuts(false).about).toBeUndefined();
+
+    for (const isMac of [false, true]) {
+      for (const c of availableCommands({ ...base, isMac })) {
+        if (c.shortcut) expect(c.hint).toBe(shortcutLabel(c.shortcut));
+      }
+    }
+    expect(shortcutLabel({ mods: ['opt', 'shift'], key: 'D' })).toBe('Opt+Shift+D');
   });
 
   it('offers the preview toggle only for a presented paste with a preview mode', () => {

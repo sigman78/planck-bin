@@ -14,7 +14,11 @@ import {
   type CommandContext,
   type PaletteItem,
   type ViewMode,
+  MODIFIER_NAMES,
+  type ModifierKey,
+  type Shortcut,
   shortcutCommand,
+  shortcutLabel,
 } from './commands';
 import { parseQuery, rankItems } from './palette-search';
 import type { FindStatus } from './viewer-find';
@@ -41,6 +45,7 @@ interface Row {
   itemId?: string;
   label: string;
   hint?: string;
+  shortcut?: Shortcut;
   icon?: SaveIcon;
   disabled?: boolean;
   /** Runs on Enter/click. Return true to keep the palette open. */
@@ -711,6 +716,7 @@ export class CommandPalette {
     const rows: Row[] = commands.map((cmd) => ({
       label: cmd.label,
       hint: cmd.hint,
+      shortcut: cmd.shortcut,
       icon: cmd.icon,
       disabled: cmd.disabled,
       action: () => {
@@ -771,6 +777,8 @@ export class CommandPalette {
       el.appendChild(label);
       if (row.icon) {
         el.appendChild(saveIcon(row.icon));
+      } else if (row.shortcut) {
+        el.appendChild(shortcutKeys(row.shortcut));
       } else if (row.hint) {
         const kbd = document.createElement('kbd');
         kbd.textContent = row.hint;
@@ -866,6 +874,74 @@ const SAVE_ICON_PATHS: Record<SaveIcon, string[]> = {
   ],
   lock: ['M1.6 5.6 H8.4 V10.9 H1.6 Z', 'M3.1 5.6 V3.9 A1.9 1.9 0 0 1 6.9 3.9 V5.6'],
 };
+
+/** Modifier key outlines in a 12x12 box, stroked in currentColor. */
+const MODIFIER_ICON_PATHS: Record<ModifierKey, string[]> = {
+  // Caret: the control key symbol.
+  ctrl: ['M2.5 6.5 L6 3 L9.5 6.5'],
+  // Looped square.
+  cmd: [
+    'M4 4 H8 V8 H4 Z',
+    'M4 4 H2.75 A1.25 1.25 0 1 1 4 2.75 Z',
+    'M8 4 V2.75 A1.25 1.25 0 1 1 9.25 4 Z',
+    'M8 8 H9.25 A1.25 1.25 0 1 1 8 9.25 Z',
+    'M4 8 V9.25 A1.25 1.25 0 1 1 2.75 8 Z',
+  ],
+  // ISO 9995-7 alternate key: a track that steps up, over a second track.
+  alt: ['M1.5 9 H4 L7 3 H10.5', 'M7 9 H10.5'],
+  // Mac option key: a track that steps down, under a second track.
+  opt: ['M1.5 3 H4 L7 9 H10.5', 'M7 3 H10.5'],
+  // Hollow up arrow.
+  shift: ['M6 1.5 L1.5 6.5 H4 V10.5 H8 V6.5 H10.5 Z'],
+};
+
+/** Sized in em, so it follows the key cap's text; the title is its tooltip. */
+function modifierIcon(mod: ModifierKey): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'island-key-icon');
+  svg.dataset.mod = mod;
+  svg.setAttribute('width', '1em');
+  svg.setAttribute('height', '1em');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const title = document.createElementNS(SVG_NS, 'title');
+  title.textContent = MODIFIER_NAMES[mod];
+  svg.appendChild(title);
+  for (const d of MODIFIER_ICON_PATHS[mod]) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
+/**
+ * A shortcut as key caps: an icon per modifier, then the main key. Assistive
+ * technology gets the text form ("Alt+Shift+P") as the label of one image.
+ */
+function shortcutKeys(shortcut: Shortcut): HTMLElement {
+  const kbd = document.createElement('kbd');
+  kbd.className = 'island-keys';
+  kbd.setAttribute('role', 'img');
+  kbd.setAttribute('aria-label', shortcutLabel(shortcut));
+  for (const mod of shortcut.mods) {
+    const cap = document.createElement('span');
+    cap.className = 'island-key';
+    cap.appendChild(modifierIcon(mod));
+    kbd.appendChild(cap);
+  }
+  const cap = document.createElement('span');
+  cap.className = 'island-key';
+  cap.setAttribute('aria-hidden', 'true');
+  cap.textContent = shortcut.key.toUpperCase();
+  kbd.appendChild(cap);
+  return kbd;
+}
 
 function previewIcon(icon: PreviewIcon): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');

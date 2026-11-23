@@ -9,10 +9,35 @@ import type { BurnState } from './paste';
 
 export type ViewMode = 'editing' | 'presenting';
 
+/** A modifier key as drawn in the palette: Cmd and Opt are the Mac keys. */
+export type ModifierKey = 'ctrl' | 'cmd' | 'alt' | 'opt' | 'shift';
+
+/** A key combination in display form: modifiers in order, then the main key. */
+export interface Shortcut {
+  mods: ModifierKey[];
+  key: string;
+}
+
+export const MODIFIER_NAMES: Record<ModifierKey, string> = {
+  ctrl: 'Ctrl',
+  cmd: 'Cmd',
+  alt: 'Alt',
+  opt: 'Opt',
+  shift: 'Shift',
+};
+
+/** The shortcut as text, e.g. "Alt+Shift+P". */
+export function shortcutLabel(shortcut: Shortcut): string {
+  return [...shortcut.mods.map((m) => MODIFIER_NAMES[m]), shortcut.key].join('+');
+}
+
 export interface PaletteItem {
   id: string;
   label: string;
+  /** Text at the row's end; for a command with a shortcut, the shortcut as text. */
   hint?: string;
+  /** Key combination that runs the item, drawn as key caps in place of the hint text. */
+  shortcut?: Shortcut;
   /** Monochrome state icon shown in place of the hint (see saveIcon). */
   icon?: 'clock' | 'burn' | 'lock';
   keywords?: string[];
@@ -72,8 +97,10 @@ interface CommandDef {
   keywords?: string[];
   /** Alt/Opt+Shift + this key runs the command. */
   key?: ShortcutKey;
-  /** Explicit hint; `mod` is Cmd on Mac, Ctrl elsewhere. Defaults to the key. */
-  hint?: (mod: string, ctx: CommandContext) => string;
+  /** Cmd (Mac) / Ctrl + this key runs the command; display only, see shortcutCommand. */
+  modKey?: string;
+  /** Explicit hint text, e.g. the value in effect. Defaults to the shortcut. */
+  hint?: (ctx: CommandContext) => string;
   submenu?: boolean;
   prefill?: string;
   icon?: (ctx: CommandContext) => PaletteItem['icon'];
@@ -93,7 +120,7 @@ const COMMANDS: CommandDef[] = [
     id: 'save',
     label: 'Save',
     keywords: ['publish', 'share'],
-    hint: (mod) => `${mod}+S`,
+    modKey: 'S',
     available: always,
     enabled: (ctx) => ctx.mode === 'editing' && ctx.canSave,
   },
@@ -102,7 +129,7 @@ const COMMANDS: CommandDef[] = [
     id: 'expiry',
     label: 'Expires',
     keywords: ['lifetime', 'ttl', 'duration', 'permanent', 'expiry'],
-    hint: (_, ctx) => ctx.lifetimeLabel ?? 'default',
+    hint: (ctx) => ctx.lifetimeLabel ?? 'default',
     submenu: true,
     available: editing,
   },
@@ -240,7 +267,7 @@ const COMMANDS: CommandDef[] = [
       'monokai',
       'one dark',
     ],
-    hint: (_, ctx) => ctx.themeLabel ?? '',
+    hint: (ctx) => ctx.themeLabel ?? '',
     submenu: true,
     available: always,
   },
@@ -253,18 +280,27 @@ const COMMANDS: CommandDef[] = [
 ];
 
 export function availableCommands(ctx: CommandContext): Command[] {
-  const mod = ctx.isMac ? 'Cmd' : 'Ctrl';
-  const alt = ctx.isMac ? 'Opt' : 'Alt';
-  return COMMANDS.filter((c) => c.available(ctx)).map((c) => ({
-    id: c.id,
-    label: typeof c.label === 'function' ? c.label(ctx) : c.label,
-    keywords: c.keywords,
-    hint: c.hint?.(mod, ctx) ?? (c.key ? `${alt}+Shift+${c.key.label}` : undefined),
-    disabled: c.enabled ? !c.enabled(ctx) : undefined,
-    submenu: c.submenu,
-    prefill: c.prefill,
-    icon: c.icon?.(ctx),
-  }));
+  const mod: ModifierKey = ctx.isMac ? 'cmd' : 'ctrl';
+  const alt: ModifierKey = ctx.isMac ? 'opt' : 'alt';
+  const shortcutOf = (c: CommandDef): Shortcut | undefined => {
+    if (c.modKey) return { mods: [mod], key: c.modKey };
+    if (c.key) return { mods: [alt, 'shift'], key: c.key.label };
+    return undefined;
+  };
+  return COMMANDS.filter((c) => c.available(ctx)).map((c) => {
+    const shortcut = c.hint ? undefined : shortcutOf(c);
+    return {
+      id: c.id,
+      label: typeof c.label === 'function' ? c.label(ctx) : c.label,
+      keywords: c.keywords,
+      hint: c.hint?.(ctx) ?? (shortcut && shortcutLabel(shortcut)),
+      shortcut,
+      disabled: c.enabled ? !c.enabled(ctx) : undefined,
+      submenu: c.submenu,
+      prefill: c.prefill,
+      icon: c.icon?.(ctx),
+    };
+  });
 }
 
 export type KeyLike = Pick<KeyboardEvent, 'code' | 'altKey' | 'shiftKey' | 'ctrlKey' | 'metaKey'>;

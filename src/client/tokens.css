@@ -18,7 +18,7 @@
  * re-declares every token and so can show another theme than the page (the
  * palette keeps the confirmed theme while the page previews one).
  *
- * Load first. The ::highlight() rules compiled from solarized-dark-hljs.css
+ * Load first. The ::highlight() rules compiled from syntax-base.css
  * keep var() references, which resolve against the highlighted element, so
  * these must live on :root (or another ancestor of #viewer).
  * Print styles keep literal greys: paper is theme-independent.
@@ -69,6 +69,12 @@
     --color-key-bg:       oklch(0.2329 0.0422 219.19); /* #00222b, drop overlay plaque */
     --color-bg:           var(--sol-base03);           /* page/body background */
     --color-scrim:        oklch(from var(--color-bg) l c h / 0.85); /* drop overlay */
+
+    /* --- UI roles: page texture ------------------------------------------- */
+    /* Strength of the paper grain over the page (application.css,
+       body::before). The grain is neutral grey, so it lightens dark pages
+       and darkens light ones. 0 turns it off. Keep it barely visible. */
+    --paper-noise-opacity: 0.03;
 
     /* --- UI roles: content ------------------------------------------------ */
     --color-editor-text: var(--sol-base1);
@@ -124,7 +130,8 @@
     --syntax-l-accent: 0.78;  /* default accent */
     --syntax-l-warm:   0.71;  /* red/orange: lower L keeps them saturated in gamut */
     --syntax-l-text:   0.758; /* body text */
-    --syntax-l-dim:    0.563; /* punctuation and comment plate, dim on purpose */
+    --syntax-l-dim:    0.563; /* punctuation, dim on purpose */
+    --syntax-l-comment: 0.615; /* comments: muted, a step above dim so prose stays legible */
     --syntax-l-addition: 0.80; /* additions, a step past accent so new lines stand out */
 
     /* chroma tiers (OKLCH C) */
@@ -138,6 +145,7 @@
     /* sources: each role takes its hue (neutrals also their chroma) from here */
     --syntax-src-text:        var(--sol-base1);
     --syntax-src-punctuation: var(--sol-base01);
+    --syntax-src-comment:     var(--syntax-src-punctuation);
     --syntax-src-keyword:     var(--sol-yellow);
     --syntax-src-definition:  var(--sol-blue);
     --syntax-src-constant:    var(--sol-cyan);
@@ -148,6 +156,9 @@
     /* neutrals: primitive chroma kept, lightness from tier */
     --syntax-text:        oklch(from var(--syntax-src-text) var(--syntax-l-text) c h); /* 7.0 */
     --syntax-punctuation: oklch(from var(--syntax-src-punctuation) var(--syntax-l-dim)  c h); /* 3.3 */
+    /* comments: muted secondary text on the code background, no plate. The
+       theme's own comment color, lifted to a legible 3.5-4.5 */
+    --syntax-comment:     oklch(from var(--syntax-src-comment) var(--syntax-l-comment) c h); /* 4.1 */
 
     /* calm accents; keyword shares the definition tier, and yellow reads
        slightly lower in contrast than blue there, keeping keywords just
@@ -163,8 +174,5 @@
     --syntax-deletion:    oklch(from var(--syntax-src-deletion) var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.4 */
     --syntax-addition:    oklch(from var(--syntax-src-addition) var(--syntax-l-addition) var(--syntax-c-vivid) h); /* 8.3 */
 
-    /* comments: background-colored text on the dim plate */
-    --syntax-comment:     var(--syntax-bg);
-    --syntax-comment-bg:  var(--syntax-punctuation);
     --syntax-diff:        var(--syntax-definition);
 }

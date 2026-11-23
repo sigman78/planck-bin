@@ -17,7 +17,7 @@ import type { Highlighted } from './highlight-config';
 import { clearSyntax, paintSyntax, supportsHighlights, viewerText } from './syntax-highlights';
 import { currentTheme } from './highlight-theme';
 import { PrintListing, type PrintSource } from './print-listing';
-import './solarized-dark-hljs.css';
+import './syntax-base.css';
 
 export interface ViewCallbacks {
   onContentInput: (content: string) => void;

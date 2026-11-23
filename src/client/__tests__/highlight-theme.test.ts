@@ -47,15 +47,13 @@ function paintedAt(theme: HighlightTheme, content: string, language?: string) {
 }
 
 describe('HighlightTheme with the bundled Solarized theme', () => {
-  const css = require('node:fs').readFileSync(`${__dirname}/../solarized-dark-hljs.css`, 'utf8');
+  const css = require('node:fs').readFileSync(`${__dirname}/../syntax-base.css`, 'utf8');
 
   it('applies plain token rules', () => {
     const p = painted(compile(css), 'const x = "hi"; // note\nfunction f(a) {}', 'javascript');
     expect(p('const')).toBe('color: var(--syntax-keyword);');
     expect(p('"hi"')).toBe('color: var(--syntax-constant);');
-    expect(p('// note')).toBe(
-      'color: var(--syntax-comment); background-color: var(--syntax-comment-bg);'
-    );
+    expect(p('// note')).toBe('color: var(--syntax-comment);');
     expect(p('f')).toBe('color: var(--syntax-definition);');
     // .hljs-params has an empty rule: base text
     expect(p('a')).toBe('');
