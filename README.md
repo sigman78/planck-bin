@@ -17,6 +17,7 @@ Pastebin for Cloudflare Workers with D1 storage. API compatible with haste-serve
 - Per-paste lifetime (3 days to permanent) and burn after reading.
 - Passphrase-protected pastes, encrypted in the browser.
 - Rendered preview for markdown pastes.
+- Five color themes (Solarized Dark and Light, GitHub, Atom One Dark, Monokai).
 - Paste expiry with a nightly cleanup cron, rate limits, optional storage cap.
 - Local drafts and recent paste list in the browser.
 
@@ -149,6 +150,13 @@ after reading** makes the next save a one-time paste (picked again, it reads **D
 reading** and turns it off). Non-default choices show as an icon on
 the Save chip: a clock for a lifetime, a flame for burn (the flame wins when both are set); the
 details are in its tooltip. Burn pastes are not added to the recent list.
+
+**Theme** switches the colors of the whole page: Solarized Dark (default), Solarized Light,
+GitHub, Atom One Dark or Monokai. Arrow keys preview a theme, Enter keeps it, Escape goes back.
+The choice is remembered in this browser. Every theme keeps the same syntax roles and contrast
+floors (about 7:1 for code text on its background), so the colors follow each original theme's
+hues, not its exact values. A page loads in Solarized Dark for a moment before switching to a
+remembered theme.
 
 **Protect with passphrase** makes the next save a protected paste. It proposes a generated
 passphrase, four words from the [EFF long wordlist](https://www.eff.org/dice) (about 52 bits), in

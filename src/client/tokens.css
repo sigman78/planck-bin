@@ -10,13 +10,24 @@
  * Translucent neutrals are --light-N (white) and --shade-N (black) at N%
  * alpha. Tints of a token use relative color syntax: oklch(from var(--x) l c h / a).
  *
+ * Themes: themes.css overrides these per html[data-theme="..."]; no
+ * attribute is Solarized Dark. A theme sets its surfaces, content colors,
+ * syntax sources (--syntax-src-*, whose hue the syntax roles take) and the
+ * lightness/chroma tiers. Derived tokens recompute where they are declared,
+ * so the attribute sits on <html>, or on a .theme-scope element: that one
+ * re-declares every token and so can show another theme than the page (the
+ * palette keeps the confirmed theme while the page previews one).
+ *
  * Load first. The ::highlight() rules compiled from solarized-dark-hljs.css
  * keep var() references, which resolve against the highlighted element, so
  * these must live on :root (or another ancestor of #viewer).
  * Print styles keep literal greys: paper is theme-independent.
  */
 
-:root {
+:root,
+.theme-scope {
+    color-scheme: dark;
+
     /* --- primitives: Solarized ------------------------------------------- */
     --sol-base03:  oklch(0.2673 0.0486 219.82); /* #002b36 */
     --sol-base02:  oklch(0.3092 0.0518 219.65); /* #073642 */
@@ -36,15 +47,18 @@
     --sol-green:   oklch(0.6444 0.1508 118.60); /* #859900 */
 
     /* --- translucent neutrals -------------------------------------------- */
-    --light-3:  oklch(1 0 0 / 0.03);
-    --light-4:  oklch(1 0 0 / 0.04);
-    --light-6:  oklch(1 0 0 / 0.06);
-    --light-8:  oklch(1 0 0 / 0.08);
-    --light-10: oklch(1 0 0 / 0.10);
-    --light-12: oklch(1 0 0 / 0.12);
-    --light-14: oklch(1 0 0 / 0.14);
-    --light-16: oklch(1 0 0 / 0.16);
-    --light-30: oklch(1 0 0 / 0.30);
+    /* --light-N lifts toward the foreground: white on dark themes, black on
+       light ones (--overlay-l: 0). --shade-N always darkens. */
+    --overlay-l: 1;
+    --light-3:  oklch(var(--overlay-l) 0 0 / 0.03);
+    --light-4:  oklch(var(--overlay-l) 0 0 / 0.04);
+    --light-6:  oklch(var(--overlay-l) 0 0 / 0.06);
+    --light-8:  oklch(var(--overlay-l) 0 0 / 0.08);
+    --light-10: oklch(var(--overlay-l) 0 0 / 0.10);
+    --light-12: oklch(var(--overlay-l) 0 0 / 0.12);
+    --light-14: oklch(var(--overlay-l) 0 0 / 0.14);
+    --light-16: oklch(var(--overlay-l) 0 0 / 0.16);
+    --light-30: oklch(var(--overlay-l) 0 0 / 0.30);
     --shade-18: oklch(0 0 0 / 0.18);
     --shade-35: oklch(0 0 0 / 0.35);
     --shade-50: oklch(0 0 0 / 0.50);
@@ -64,6 +78,7 @@
     --color-logo:        var(--sol-base3);            /* logo fill, headings, emphasis */
     --color-link:        var(--sol-blue);             /* links in rendered markdown */
     --color-preview-on:  var(--sol-cyan);             /* preview chip while on */
+    --color-on-accent:   oklch(1 0 0);                /* text on accent chips */
     --color-focus-muted: oklch(0.4459 0.0562 215.93); /* #2b5c68, quiet focus ring: viewer and gutter links */
 
     /* --- UI roles: overlays, toasts, find --------------------------------- */
@@ -71,7 +86,8 @@
     --color-toast-error-bg: oklch(0.4587 0.1750 27.74); /* #a31515 */
     --color-toast-edge:     var(--light-10);
     --color-toast-error-edge: var(--light-16);
-    --color-text-bright:    oklch(1 0 0);               /* toast text, tooltip label */
+    --color-toast-text:     oklch(1 0 0);
+    --color-toast-error-text: oklch(1 0 0);
     --color-line-highlight: var(--light-3);             /* current line */
     --color-selection:      oklch(0.3760 0.0590 215.46); /* #114955, solid for contrast */
     --color-find:           oklch(from var(--sol-yellow) l c h / 0.35);
@@ -109,6 +125,7 @@
     --syntax-l-warm:   0.71;  /* red/orange: lower L keeps them saturated in gamut */
     --syntax-l-text:   0.758; /* body text */
     --syntax-l-dim:    0.563; /* punctuation and comment plate, dim on purpose */
+    --syntax-l-addition: 0.80; /* additions, a step past accent so new lines stand out */
 
     /* chroma tiers (OKLCH C) */
     --syntax-c-calm:  0.115;  /* structural roles; ceiling set by blue, which
@@ -118,24 +135,36 @@
 
     --syntax-bg:          var(--color-bg);
 
+    /* sources: each role takes its hue (neutrals also their chroma) from here */
+    --syntax-src-text:        var(--sol-base1);
+    --syntax-src-punctuation: var(--sol-base01);
+    --syntax-src-keyword:     var(--sol-yellow);
+    --syntax-src-definition:  var(--sol-blue);
+    --syntax-src-constant:    var(--sol-cyan);
+    --syntax-src-special:     var(--sol-orange);
+    --syntax-src-deletion:    var(--sol-red);
+    --syntax-src-addition:    var(--sol-green);
+
     /* neutrals: primitive chroma kept, lightness from tier */
-    --syntax-text:        oklch(from var(--sol-base1)  var(--syntax-l-text) c h); /* 7.0 */
-    --syntax-punctuation: oklch(from var(--sol-base01) var(--syntax-l-dim)  c h); /* 3.3 */
+    --syntax-text:        oklch(from var(--syntax-src-text) var(--syntax-l-text) c h); /* 7.0 */
+    --syntax-punctuation: oklch(from var(--syntax-src-punctuation) var(--syntax-l-dim)  c h); /* 3.3 */
 
     /* calm accents; keyword shares the definition tier, and yellow reads
        slightly lower in contrast than blue there, keeping keywords just
        below definitions */
-    --syntax-keyword:     oklch(from var(--sol-yellow) var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.5 */
-    --syntax-definition:  oklch(from var(--sol-blue)   var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.6 */
-    --syntax-constant:    oklch(from var(--sol-cyan)   var(--syntax-l-bright) var(--syntax-c-calm) h); /* 9.6 */
+    --syntax-keyword:     oklch(from var(--syntax-src-keyword) var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.5 */
+    --syntax-definition:  oklch(from var(--syntax-src-definition) var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.6 */
+    --syntax-constant:    oklch(from var(--syntax-src-constant) var(--syntax-l-bright) var(--syntax-c-calm) h); /* 9.6 */
+    /* types and built-ins: keyword unless a theme gives them their own hue */
+    --syntax-type:        var(--syntax-keyword);
 
     /* vivid accents; additions lifted a step so new lines stand out */
-    --syntax-special:     oklch(from var(--sol-orange) var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.5 */
-    --syntax-deletion:    oklch(from var(--sol-red)    var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.4 */
-    --syntax-addition:    oklch(from var(--sol-green)  calc(var(--syntax-l-accent) + 0.02) var(--syntax-c-vivid) h); /* 8.3 */
+    --syntax-special:     oklch(from var(--syntax-src-special) var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.5 */
+    --syntax-deletion:    oklch(from var(--syntax-src-deletion) var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.4 */
+    --syntax-addition:    oklch(from var(--syntax-src-addition) var(--syntax-l-addition) var(--syntax-c-vivid) h); /* 8.3 */
 
-    /* comments: base03 text on the dim plate */
-    --syntax-comment:     var(--sol-base03);
+    /* comments: background-colored text on the dim plate */
+    --syntax-comment:     var(--syntax-bg);
     --syntax-comment-bg:  var(--syntax-punctuation);
     --syntax-diff:        var(--syntax-definition);
 }

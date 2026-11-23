@@ -13,6 +13,15 @@ const ids = (ctx: Partial<CommandContext>) =>
   availableCommands({ ...base, ...ctx }).map((c) => c.id);
 
 describe('availableCommands', () => {
+  it('offers the theme menu everywhere, naming the theme on screen', () => {
+    for (const mode of ['editing', 'presenting'] as const) {
+      const theme = availableCommands({ ...base, mode, themeLabel: 'Monokai' }).find(
+        (c) => c.id === 'theme'
+      );
+      expect(theme).toMatchObject({ label: 'Theme', submenu: true, hint: 'Monokai' });
+    }
+  });
+
   it('offers save options only while editing', () => {
     expect(ids({ mode: 'editing' })).toEqual(expect.arrayContaining(['expiry', 'burn']));
     expect(ids({})).not.toContain('expiry');
@@ -64,6 +73,7 @@ describe('availableCommands', () => {
       'zoom-out',
       'zoom-reset',
       'twitter',
+      'theme',
       'about',
     ]);
   });

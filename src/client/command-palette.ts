@@ -26,12 +26,19 @@ export interface PaletteHost {
   run(id: string): void;
   submenu(id: string): PaletteItem[];
   runSubmenu(menuId: string, itemId: string): void;
+  /**
+   * The keyboard moved the selection in a menu to itemId; null when the menu
+   * is left without picking. Lets a menu show its choice live (themes).
+   */
+  previewSubmenu?(menuId: string, itemId: string | null): void;
   goToLine(line: number): void;
   find(text: string, step: 0 | 1 | -1): FindStatus;
   clearFind(): void;
 }
 
 interface Row {
+  /** Submenu item behind the row. */
+  itemId?: string;
   label: string;
   hint?: string;
   icon?: SaveIcon;
@@ -72,6 +79,7 @@ const MENU_TITLES: Record<string, string> = {
   language: 'Language',
   recent: 'Recent',
   expiry: 'Expires',
+  theme: 'Theme',
 };
 
 const COLLAPSE_FALLBACK_MS = 650;
@@ -103,6 +111,8 @@ export class CommandPalette {
   private menuItems: PaletteItem[] = [];
   private rows: Row[] = [];
   private selected = 0;
+  /** Menu whose item is previewed on screen, to undo on leaving it. */
+  private previewMenu: string | null = null;
   private findStatus: FindStatus = { current: 0, total: 0 };
   private prevFocus: Element | null = null;
   private collapseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -382,6 +392,7 @@ export class CommandPalette {
   close(restoreFocus = true): void {
     if (!this.isOpen()) return;
     this.host.clearFind();
+    this.endPreview();
 
     this.input.blur();
     this.root.classList.remove('open');
@@ -545,6 +556,11 @@ export class CommandPalette {
     }
     this.selected = 0;
     this.render();
+    // Filtering is a keyboard selection too: preview the top match.
+    if (this.menu !== null) {
+      if (this.rows[this.selected]?.itemId === undefined) this.endPreview();
+      else this.previewSelected();
+    }
   }
 
   private onInputKey(evt: KeyboardEvent): void {
@@ -552,19 +568,23 @@ export class CommandPalette {
       case 'ArrowDown':
         evt.preventDefault();
         this.move(1);
+        this.previewSelected();
         break;
       case 'ArrowUp':
         evt.preventDefault();
         this.move(-1);
+        this.previewSelected();
         break;
       case 'Tab':
         evt.preventDefault();
         this.move(evt.shiftKey ? -1 : 1);
+        this.previewSelected();
         break;
       case 'PageDown':
       case 'PageUp':
         evt.preventDefault();
         this.page(evt.key === 'PageDown' ? 1 : -1);
+        this.previewSelected();
         break;
       case 'Home':
       case 'End':
@@ -573,6 +593,7 @@ export class CommandPalette {
         if (evt.shiftKey) break;
         evt.preventDefault();
         this.jump(evt.key === 'Home' ? 1 : -1);
+        this.previewSelected();
         break;
       case 'Enter':
         evt.preventDefault();
@@ -599,11 +620,31 @@ export class CommandPalette {
   }
 
   private setMenu(menu: string | null): void {
+    this.endPreview();
     this.menu = menu;
     this.menuItems = menu === null ? [] : this.host.submenu(menu);
     this.input.value = '';
-    this.selected = 0;
+    this.selected = Math.max(
+      this.menuItems.findIndex((item) => item.current),
+      0
+    );
     this.render();
+  }
+
+  /** Show the keyboard-selected menu item live, if the host previews this menu. */
+  private previewSelected(): void {
+    const itemId = this.rows[this.selected]?.itemId;
+    if (this.menu === null || itemId === undefined || !this.host.previewSubmenu) return;
+    this.previewMenu = this.menu;
+    this.host.previewSubmenu(this.menu, itemId);
+  }
+
+  /** Undo a live preview (leaving the menu, or before a pick runs). */
+  private endPreview(): void {
+    if (this.previewMenu === null) return;
+    const menu = this.previewMenu;
+    this.previewMenu = null;
+    this.host.previewSubmenu?.(menu, null);
   }
 
   // --- rows -----------------------------------------------------------------
@@ -616,6 +657,7 @@ export class CommandPalette {
       const menuId = this.menu;
       const items = rankItems(this.menuItems, text, itemTexts);
       return items.map((item) => ({
+        itemId: item.id,
         label: item.label,
         hint: item.hint,
         action: () => {

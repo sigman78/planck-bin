@@ -16,6 +16,8 @@ export interface PaletteItem {
   /** Monochrome state icon shown in place of the hint (see saveIcon). */
   icon?: 'clock' | 'burn' | 'lock';
   keywords?: string[];
+  /** The menu opens with this item selected (the value in effect). */
+  current?: boolean;
 }
 
 export interface Command extends PaletteItem {
@@ -40,6 +42,8 @@ export interface CommandContext {
   burnNext?: boolean;
   /** Lifetime the next save asks for, e.g. "1 week" or "default". */
   lifetimeLabel?: string;
+  /** Name of the color theme on screen. */
+  themeLabel?: string;
   /** The paste on screen is protected: behind the passphrase gate, or opened. */
   lock?: 'pending' | 'open';
   /** The next save is protected with a passphrase. */
@@ -220,6 +224,25 @@ const COMMANDS: CommandDef[] = [
     keywords: ['tweet', 'post'],
     key: { code: 'KeyX', label: 'X' },
     available: (ctx) => presenting(ctx) && ctx.enableTwitter && !ctx.burn,
+  },
+  {
+    id: 'theme',
+    label: 'Theme',
+    keywords: [
+      'color',
+      'colour',
+      'dark',
+      'light',
+      'appearance',
+      'scheme',
+      'solarized',
+      'github',
+      'monokai',
+      'one dark',
+    ],
+    hint: (_, ctx) => ctx.themeLabel ?? '',
+    submenu: true,
+    available: always,
   },
   {
     id: 'about',
