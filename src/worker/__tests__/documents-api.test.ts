@@ -102,9 +102,8 @@ describe('cache headers', () => {
 
 describe('method handling', () => {
   it.each([
-    ['PUT', '/documents', 'POST'],
-    ['GET', '/documents', 'POST'],
-    ['DELETE', '/documents/tavelu-hasoq', 'GET, HEAD'],
+    ['PUT', '/documents', 'GET, HEAD, POST'],
+    ['PUT', '/documents/tavelu-hasoq', 'GET, HEAD, DELETE'],
     ['POST', '/raw/tavelu-hasoq', 'GET, HEAD'],
   ])('%s %s is 405 with Allow: %s', async (method, path, allow) => {
     const res = await get(path, { method }).response;

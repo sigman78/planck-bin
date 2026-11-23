@@ -8,6 +8,8 @@ import {
   type KeyOptions,
   type KeyStrategy,
   type LockedStub,
+  type OwnedCursor,
+  type OwnedRow,
   type StoredDocument,
   type UnlockCandidate,
 } from './types';
@@ -71,17 +73,24 @@ export class D1DocumentStore implements DocumentStore {
   // Burn and protected documents never leave D1 through get/getWithin: the
   // CASE WHEN keeps their content out of the result. Only take() reads a burn
   // document, and only an unlock reads a protected one.
+  //
+  // Private documents: every read carries visible(), so for anyone but the
+  // owner the row does not exist. The viewer is always the last bind.
 
-  async get(key: string): Promise<StoredDocument | BurnPending | LockedStub | null> {
+  async get(
+    key: string,
+    viewer: string | null
+  ): Promise<StoredDocument | BurnPending | LockedStub | null> {
     const now = Math.floor(Date.now() / 1000);
 
     const row = await this.db
       .prepare(
         `SELECT CASE WHEN burn = 0 AND lock_salt IS NULL THEN content END AS content,
-           created_at, expires_at, burn, lock_salt
-         FROM documents WHERE id = ? AND (expires_at IS NULL OR expires_at > ?)`
+           created_at, expires_at, burn, lock_salt, owner, private
+         FROM documents WHERE id = ?1 AND (expires_at IS NULL OR expires_at > ?2)
+           AND ${visible(3)}`
       )
-      .bind(key, now)
+      .bind(key, now, viewer)
       .first<DocumentRow>();
 
     if (!row) return null;
@@ -92,7 +101,8 @@ export class D1DocumentStore implements DocumentStore {
 
   async getWithin(
     key: string,
-    maxChars: number
+    maxChars: number,
+    viewer: string | null
   ): Promise<StoredDocument | BurnPending | LockedStub | 'too-large' | null> {
     const now = Math.floor(Date.now() / 1000);
 
@@ -101,10 +111,11 @@ export class D1DocumentStore implements DocumentStore {
       .prepare(
         `SELECT CASE WHEN burn = 0 AND lock_salt IS NULL AND LENGTH(content) <= ?3
              THEN content END AS content,
-           created_at, expires_at, burn, lock_salt
-         FROM documents WHERE id = ?1 AND (expires_at IS NULL OR expires_at > ?2)`
+           created_at, expires_at, burn, lock_salt, owner, private
+         FROM documents WHERE id = ?1 AND (expires_at IS NULL OR expires_at > ?2)
+           AND ${visible(4)}`
       )
-      .bind(key, now, maxChars)
+      .bind(key, now, maxChars, viewer)
       .first<DocumentRow>();
 
     if (!row) return null;
@@ -114,7 +125,7 @@ export class D1DocumentStore implements DocumentStore {
     return fromRow(row);
   }
 
-  async take(key: string): Promise<StoredDocument | null> {
+  async take(key: string, viewer: string | null): Promise<StoredDocument | null> {
     const now = Math.floor(Date.now() / 1000);
 
     // One statement decides the only reader: a concurrent take finds no row.
@@ -122,16 +133,20 @@ export class D1DocumentStore implements DocumentStore {
       .prepare(
         `DELETE FROM documents
          WHERE id = ?1 AND burn = 1 AND lock_salt IS NULL
-           AND (expires_at IS NULL OR expires_at > ?2)
-         RETURNING content, created_at, expires_at, burn`
+           AND (expires_at IS NULL OR expires_at > ?2) AND ${visible(3)}
+         RETURNING content, created_at, expires_at, burn, owner, private`
       )
-      .bind(key, now)
+      .bind(key, now, viewer)
       .first<DocumentRow>();
 
     return row ? fromRow(row) : null;
   }
 
-  async reserveUnlock(key: string, maxAttempts: number): Promise<UnlockCandidate | null> {
+  async reserveUnlock(
+    key: string,
+    maxAttempts: number,
+    viewer: string | null
+  ): Promise<UnlockCandidate | null> {
     const now = Math.floor(Date.now() / 1000);
 
     // Counting before checking makes the cap exact: N concurrent guesses
@@ -140,10 +155,11 @@ export class D1DocumentStore implements DocumentStore {
       .prepare(
         `UPDATE documents SET lock_failures = lock_failures + 1
          WHERE id = ?1 AND lock_salt IS NOT NULL AND lock_failures < ?3
-           AND (expires_at IS NULL OR expires_at > ?2)
-         RETURNING content, created_at, expires_at, burn, lock_verifier, lock_failures`
+           AND (expires_at IS NULL OR expires_at > ?2) AND ${visible(4)}
+         RETURNING content, created_at, expires_at, burn, owner, private,
+           lock_verifier, lock_failures`
       )
-      .bind(key, now, maxAttempts)
+      .bind(key, now, maxAttempts, viewer)
       .first<DocumentRow & { lock_verifier: string; lock_failures: number }>();
 
     if (!row) return null;
@@ -164,17 +180,17 @@ export class D1DocumentStore implements DocumentStore {
       .run();
   }
 
-  async takeLocked(key: string): Promise<StoredDocument | null> {
+  async takeLocked(key: string, viewer: string | null): Promise<StoredDocument | null> {
     const now = Math.floor(Date.now() / 1000);
 
     const row = await this.db
       .prepare(
         `DELETE FROM documents
          WHERE id = ?1 AND burn = 1 AND lock_salt IS NOT NULL
-           AND (expires_at IS NULL OR expires_at > ?2)
-         RETURNING content, created_at, expires_at, burn`
+           AND (expires_at IS NULL OR expires_at > ?2) AND ${visible(3)}
+         RETURNING content, created_at, expires_at, burn, owner, private`
       )
-      .bind(key, now)
+      .bind(key, now, viewer)
       .first<DocumentRow>();
 
     return row ? fromRow(row) : null;
@@ -182,6 +198,45 @@ export class D1DocumentStore implements DocumentStore {
 
   async remove(key: string): Promise<void> {
     await this.db.prepare('DELETE FROM documents WHERE id = ?').bind(key).run();
+  }
+
+  async removeOwned(key: string, owner: string): Promise<boolean> {
+    const result = await this.db
+      .prepare('DELETE FROM documents WHERE id = ? AND owner = ?')
+      .bind(key, owner)
+      .run();
+    return result.meta.changes > 0;
+  }
+
+  async listOwned(owner: string, before: OwnedCursor | null, limit: number): Promise<OwnedRow[]> {
+    const now = Math.floor(Date.now() / 1000);
+    // Keyset paging on the (owner, created_at, id) index. The head is cut in
+    // SQL, so a 400 KB paste sends only its start; burn and protected rows send none.
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, created_at, expires_at, burn, private,
+           lock_salt IS NOT NULL AS locked,
+           LENGTH(CAST(content AS BLOB)) AS size,
+           CASE WHEN burn = 0 AND lock_salt IS NULL THEN substr(content, 1, ${HEAD_CHARS}) END
+             AS head
+         FROM documents
+         WHERE owner = ?1 AND (expires_at IS NULL OR expires_at > ?2)
+           AND (?3 IS NULL OR created_at < ?3 OR (created_at = ?3 AND id < ?4))
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?5`
+      )
+      .bind(owner, now, before?.createdAt ?? null, before?.key ?? null, limit)
+      .all<OwnedSqlRow>();
+    return results.map((r) => ({
+      key: r.id,
+      createdAt: r.created_at,
+      expiresAt: r.expires_at,
+      size: r.size,
+      burn: r.burn === 1,
+      locked: r.locked === 1,
+      private: r.private === 1,
+      head: r.head,
+    }));
   }
 
   async incrementViews(key: string): Promise<void> {
@@ -205,8 +260,9 @@ export class D1DocumentStore implements DocumentStore {
       const result = await this.db
         .prepare(
           `INSERT INTO documents
-             (id, content, created_at, expires_at, views, burn, lock_salt, lock_verifier)
-           VALUES (?, ?, ?, ?, 0, ?, ?, ?)
+             (id, content, created_at, expires_at, views, burn, lock_salt, lock_verifier,
+              owner, private)
+           VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO NOTHING`
         )
         .bind(
@@ -216,7 +272,9 @@ export class D1DocumentStore implements DocumentStore {
           expiresAt,
           options.burn ? 1 : 0,
           options.lock?.salt ?? null,
-          options.lock?.verifier ?? null
+          options.lock?.verifier ?? null,
+          options.owner ?? null,
+          options.private ? 1 : 0
         )
         .run();
 
@@ -257,20 +315,47 @@ export class D1DocumentStore implements DocumentStore {
   }
 }
 
+/** Characters of content the owner's list reads per row (the client shows one line). */
+const HEAD_CHARS = 200;
+
+/** Public, or owned by the viewer bound at ?n (a NULL viewer owns nothing). */
+function visible(n: number): string {
+  return `(private = 0 OR owner = ?${n})`;
+}
+
 interface DocumentRow {
   content: string | null;
   created_at: number;
   expires_at: number | null;
   burn: number;
   lock_salt?: string | null;
+  owner?: string | null;
+  private?: number;
 }
 
-function lockedStub(row: DocumentRow & { lock_salt?: string | null }): LockedStub {
-  return { locked: true, salt: row.lock_salt!, burn: row.burn === 1 };
+interface OwnedSqlRow {
+  id: string;
+  created_at: number;
+  expires_at: number | null;
+  burn: number;
+  private: number;
+  locked: number;
+  size: number;
+  head: string | null;
+}
+
+function lockedStub(row: DocumentRow): LockedStub {
+  return { locked: true, salt: row.lock_salt!, burn: row.burn === 1, owner: row.owner ?? null };
 }
 
 function fromRow(row: DocumentRow): StoredDocument {
-  return { content: row.content ?? '', createdAt: row.created_at, expiresAt: row.expires_at };
+  return {
+    content: row.content ?? '',
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    owner: row.owner ?? null,
+    private: row.private === 1,
+  };
 }
 
 export function createStore(env: Env): DocumentStore {

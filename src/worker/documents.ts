@@ -17,6 +17,7 @@ import {
 } from './types';
 import { createStore } from './storage';
 import { getServerConfig } from './config';
+import { viewerId } from './session';
 
 type AppContext = Context<{ Bindings: Env }>;
 
@@ -37,6 +38,10 @@ export interface LoadedDocument {
   expiresAt: number | null;
   /** Burn after reading: this load deleted it, so it must not be cached or counted. */
   burn: boolean;
+  /** Readable by its owner only: never cached anywhere. */
+  private: boolean;
+  /** The signed-in viewer created it. */
+  mine: boolean;
   /** Strong validator: stored pastes never change; built-in pages change per deploy. */
   etag: string;
 }
@@ -65,14 +70,15 @@ export async function loadDocument(
   if (isBuiltinPage(key)) return loadBuiltinPage(c, key);
   if (!isValidKey(key)) return null;
 
+  const viewer = await viewerId(c);
   const store = createStore(c.env);
-  const stored = await store.get(key);
-  if (isLockedStub(stored)) return stored;
-  if (stored !== BURN_PENDING) return stored ? fromStored(key, stored, false) : null;
+  const stored = await store.get(key, viewer);
+  if (isLockedStub(stored)) return withMine(stored, viewer);
+  if (stored !== BURN_PENDING) return stored ? fromStored(key, stored, false, viewer) : null;
   if (!consume) return BURN_PENDING;
 
-  const taken = await store.take(key);
-  return taken ? fromStored(key, taken, true) : null;
+  const taken = await store.take(key, viewer);
+  return taken ? fromStored(key, taken, true, viewer) : null;
 }
 
 /**
@@ -92,10 +98,11 @@ export async function loadDocumentWithin(
   }
   if (!isValidKey(key)) return null;
 
-  const stored = await createStore(c.env).getWithin(key, maxChars);
+  const viewer = await viewerId(c);
+  const stored = await createStore(c.env).getWithin(key, maxChars, viewer);
   if (stored === null || stored === 'too-large' || stored === BURN_PENDING) return stored;
-  if (isLockedStub(stored)) return stored;
-  return fromStored(key, stored, false);
+  if (isLockedStub(stored)) return withMine(stored, viewer);
+  return fromStored(key, stored, false, viewer);
 }
 
 export function isLockedStub(value: unknown): value is LockedStub {
@@ -104,10 +111,30 @@ export function isLockedStub(value: unknown): value is LockedStub {
 
 /** The content-free answer for a protected paste (API and page render). */
 export function lockedPending(key: string, stub: LockedStub): LockedPending {
-  return { key, locked: true, salt: stub.salt, ...(stub.burn ? { burn: true } : {}) };
+  return {
+    key,
+    locked: true,
+    salt: stub.salt,
+    ...(stub.burn ? { burn: true } : {}),
+    ...(stub.mine ? { mine: true } : {}),
+  };
 }
 
-export function fromStored(key: string, stored: StoredDocument, burn: boolean): LoadedDocument {
+function isOwner(owner: string | null | undefined, viewer: string | null): boolean {
+  return viewer !== null && owner === viewer;
+}
+
+function withMine(stub: LockedStub, viewer: string | null): LockedStub {
+  return { ...stub, mine: isOwner(stub.owner, viewer) };
+}
+
+export function fromStored(
+  key: string,
+  stored: StoredDocument,
+  burn: boolean,
+  viewer: string | null
+): LoadedDocument {
+  const mine = isOwner(stored.owner, viewer);
   return {
     key,
     content: stored.content,
@@ -115,7 +142,11 @@ export function fromStored(key: string, stored: StoredDocument, burn: boolean): 
     createdAt: stored.createdAt,
     expiresAt: stored.expiresAt,
     burn,
-    etag: burn ? '' : `"${key}-${stored.createdAt}"`,
+    private: stored.private === true,
+    mine,
+    // The owner's copy says `mine`: a distinct validator, so a copy cached
+    // while signed out never answers a signed-in revalidation (and back).
+    etag: burn ? '' : `"${key}-${stored.createdAt}${mine ? '-m' : ''}"`,
   };
 }
 
@@ -134,6 +165,8 @@ async function loadBuiltinPage(c: AppContext, key: string): Promise<LoadedDocume
     createdAt: null,
     expiresAt: null,
     burn: false,
+    private: false,
+    mine: false,
     etag: `"${key}-${fnv1a(content)}"`,
   };
 }
@@ -165,6 +198,8 @@ export function toGetResponse(doc: LoadedDocument): GetResponse {
     createdAt: isoOrNull(doc.createdAt),
     expiresAt: isoOrNull(doc.expiresAt),
     ...(doc.burn ? { burn: true } : {}),
+    ...(doc.mine ? { mine: true } : {}),
+    ...(doc.private ? { private: true } : {}),
   };
 }
 

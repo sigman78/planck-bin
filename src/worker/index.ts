@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from './types';
 import { api } from './api';
+import { auth } from './auth';
 import { createStore } from './storage';
 import { installRequestPolicy } from './request-policy';
 import { createPageHandler } from './pages';
@@ -14,6 +15,9 @@ installRequestPolicy(app);
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: Date.now() });
 });
+
+// Sign-in: /auth/login, /auth/callback, /auth/logout, /auth/me
+app.route('/', auth);
 
 // Document API: /documents, /documents/:id, /raw/:id
 app.route('/', api);

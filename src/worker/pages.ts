@@ -132,11 +132,12 @@ async function renderRoute(
 
     // Fresh headers: the shell's ETag/Content-Length do not describe this body,
     // and the page references hashed assets, so it must not outlive a deploy.
+    // A private paste is not stored at all: a copy would outlive a sign-out.
     return new Response(html, {
       status: doc ? 200 : 404,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': doc?.private ? 'private, no-store' : 'no-cache',
       },
     });
   } catch (error) {
