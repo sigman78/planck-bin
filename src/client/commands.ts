@@ -39,15 +39,15 @@ export interface PaletteItem {
   /** Key combination that runs the item, drawn as key caps in place of the hint text. */
   shortcut?: Shortcut;
   /** Monochrome state icon shown in place of the hint (see saveIcon). */
-  icon?: 'clock' | 'burn' | 'lock';
+  icon?: 'clock' | 'burn' | 'lock' | 'private';
   keywords?: string[];
   /** The menu opens with this item selected (the value in effect). */
   current?: boolean;
+  /** Listed but not runnable in this context (shown greyed out). */
+  disabled?: boolean;
 }
 
 export interface Command extends PaletteItem {
-  /** Listed but not runnable in this context (shown greyed out). */
-  disabled?: boolean;
   /** Opens a nested list instead of running. */
   submenu?: boolean;
   /** Replaces the input with this prefix instead of running (e.g. ":"). */
@@ -77,6 +77,14 @@ export interface CommandContext {
   hasPassphrase?: boolean;
   /** A preview mode can present the paste on screen: its label, and whether it is on. */
   preview?: { label: string; on: boolean };
+  /** Sign-in is configured on this server. */
+  authEnabled?: boolean;
+  /** Display name of the signed-in user; undefined when signed out. */
+  userName?: string;
+  /** The next save is private (signed in only). */
+  privateNext?: boolean;
+  /** The signed-in user created the paste on screen. */
+  mine?: boolean;
 }
 
 /**
@@ -112,6 +120,7 @@ interface CommandDef {
 const presenting = (ctx: CommandContext) => ctx.mode === 'presenting';
 const editing = (ctx: CommandContext) => ctx.mode === 'editing';
 const always = () => true;
+const signedIn = (ctx: CommandContext) => ctx.userName !== undefined;
 /** Behind a question (burn reveal, passphrase): nothing of the paste is loaded. */
 const gated = (ctx: CommandContext) => ctx.burn === 'pending' || ctx.lock === 'pending';
 
@@ -149,6 +158,14 @@ const COMMANDS: CommandDef[] = [
     available: editing,
   },
   {
+    id: 'private',
+    // Like burn, a toggle that names the action it will perform.
+    label: (ctx) => (ctx.privateNext ? "Don't make private" : 'Make private'),
+    keywords: ['private', 'personal', 'only me', 'hidden', 'owner', 'secret'],
+    icon: (ctx) => (ctx.privateNext ? 'private' : undefined),
+    available: (ctx) => editing(ctx) && signedIn(ctx),
+  },
+  {
     id: 'new',
     label: 'New paste',
     keywords: ['clear', 'reset', 'blank'],
@@ -175,6 +192,14 @@ const COMMANDS: CommandDef[] = [
     label: 'Copy passphrase',
     keywords: ['password', 'secret', 'clipboard', 'share'],
     available: (ctx) => presenting(ctx) && ctx.hasPassphrase === true && ctx.burn !== 'burned',
+  },
+  {
+    id: 'delete',
+    label: 'Delete paste',
+    keywords: ['remove', 'destroy', 'erase', 'mine'],
+    // A revealed burn paste is already gone on the server.
+    available: (ctx) =>
+      presenting(ctx) && signedIn(ctx) && ctx.mine === true && ctx.burn !== 'burned',
   },
   {
     id: 'raw',
@@ -225,6 +250,13 @@ const COMMANDS: CommandDef[] = [
     available: always,
   },
   {
+    id: 'mine',
+    label: 'My pastes',
+    keywords: ['own', 'list', 'account', 'history', 'delete'],
+    submenu: true,
+    available: signedIn,
+  },
+  {
     id: 'zoom-in',
     label: 'Zoom in',
     keywords: ['font', 'bigger'],
@@ -270,6 +302,20 @@ const COMMANDS: CommandDef[] = [
     hint: (ctx) => ctx.themeLabel ?? '',
     submenu: true,
     available: always,
+  },
+  {
+    id: 'sign-in',
+    label: 'Sign in',
+    keywords: ['login', 'log in', 'account', 'oidc'],
+    available: (ctx) => ctx.authEnabled === true && !signedIn(ctx),
+  },
+  {
+    id: 'sign-out',
+    label: 'Sign out',
+    keywords: ['logout', 'log out', 'account'],
+    // The only place the signed-in name shows.
+    hint: (ctx) => ctx.userName ?? '',
+    available: signedIn,
   },
   {
     id: 'about',

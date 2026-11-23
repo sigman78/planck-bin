@@ -22,6 +22,15 @@ export class DraftStore {
     }, DEBOUNCE_MS);
   }
 
+  /** Write now (before leaving the page, e.g. to sign in). */
+  saveNow(content: string): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.write(content);
+  }
+
   load(): string | null {
     try {
       return localStorage.getItem(DRAFT_KEY);

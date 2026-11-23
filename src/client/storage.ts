@@ -14,6 +14,7 @@ import type {
   LifetimeId,
   LockSpec,
   LockedPending,
+  OwnedList,
   SaveResponse,
   UnlockRejected,
 } from '../shared/types';
@@ -28,6 +29,10 @@ export interface LoadResult {
   burn?: BurnState;
   /** Protected paste (content here is the decrypted text). */
   locked?: boolean;
+  /** The signed-in viewer created it. */
+  mine?: boolean;
+  /** Readable by its owner only. */
+  private?: boolean;
 }
 
 export interface SaveOptions {
@@ -36,11 +41,16 @@ export interface SaveOptions {
   burn?: boolean;
   /** Protected paste: the content is already encrypted. */
   lock?: LockSpec;
+  /** Readable by the signed-in creator only. */
+  private?: boolean;
+  /** Saved while signed in: the paste is owned. */
+  owned?: boolean;
 }
 
 export interface SaveResult {
   key: string;
   burn?: BurnState;
+  private?: boolean;
 }
 
 /**
@@ -62,6 +72,7 @@ export class LockedError extends Error {
   readonly key: string;
   readonly salt: string;
   readonly burn: boolean;
+  readonly mine: boolean;
 
   constructor(pending: LockedPending) {
     super('Protected paste');
@@ -69,6 +80,7 @@ export class LockedError extends Error {
     this.key = pending.key;
     this.salt = pending.salt;
     this.burn = pending.burn === true;
+    this.mine = pending.mine === true;
   }
 }
 
@@ -99,6 +111,11 @@ export class StorageService {
     }
   }
 
+  /** Drop the memory copies (sign-in changes what `mine` and private pastes say). */
+  forgetAll(): void {
+    this.recent.clear();
+  }
+
   /**
    * Load document from server
    * @throws Error if fetch fails or document not found
@@ -126,6 +143,8 @@ export class StorageService {
       key: data.key,
       frozen: data.frozen,
       burn: data.burn ? 'burned' : undefined,
+      mine: data.mine === true,
+      private: data.private === true,
     };
     // A revealed burn paste exists only in this tab now: back/forward finds it here.
     this.remember(doc);
@@ -182,6 +201,7 @@ export class StorageService {
     const query = new URLSearchParams();
     if (options.expires) query.set('expires', options.expires);
     if (options.burn) query.set('burn', '1');
+    if (options.private) query.set('private', '1');
     const search = query.toString();
     // A lock rides in a JSON body: the token stays out of URLs and logs.
     const response = await fetch(search ? `/documents?${search}` : '/documents', {
@@ -200,8 +220,33 @@ export class StorageService {
 
     // The creator sees a burn paste from memory: no read, so it stays armed.
     const burn = data.burn ? 'armed' : undefined;
+    const owned = { mine: options.owned === true, private: data.private === true };
     // A protected paste is remembered by the caller, as text rather than ciphertext.
-    if (!options.lock) this.remember({ key: data.key, content, burn });
-    return { key: data.key, burn };
+    if (!options.lock) this.remember({ key: data.key, content, burn, ...owned });
+    return { key: data.key, burn, private: owned.private };
+  }
+
+  /**
+   * The signed-in user's pastes, newest first.
+   * @throws Error when signed out or the server could not answer
+   */
+  async listMine(before?: string): Promise<OwnedList> {
+    const response = await fetch(
+      before ? `/documents?before=${encodeURIComponent(before)}` : '/documents',
+      { cache: 'no-store' }
+    );
+    if (!response.ok) throw new Error(`Failed to list pastes: ${response.status}`);
+    return response.json();
+  }
+
+  /**
+   * Delete one of the signed-in user's pastes.
+   * @throws Error('Document not found') when it is gone or not theirs
+   */
+  async remove(key: string): Promise<void> {
+    const response = await fetch(`/documents/${key}`, { method: 'DELETE' });
+    if (response.status === 404) throw new Error('Document not found');
+    if (!response.ok) throw new Error(`Failed to delete document: ${response.status}`);
+    this.recent.delete(key);
   }
 }

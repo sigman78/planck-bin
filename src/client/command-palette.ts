@@ -85,6 +85,13 @@ const MENU_TITLES: Record<string, string> = {
   recent: 'Recent',
   expiry: 'Expires',
   theme: 'Theme',
+  mine: 'My pastes',
+};
+
+/** What an empty submenu says (filtered menus say "No matches"). */
+const MENU_EMPTY: Record<string, string> = {
+  recent: 'No recent pastes',
+  mine: 'No pastes yet',
 };
 
 const COLLAPSE_FALLBACK_MS = 650;
@@ -624,6 +631,16 @@ export class CommandPalette {
     this.onInputChange();
   }
 
+  /**
+   * The host's items changed (an async list arrived, sign-in state is known):
+   * rebuild the rows in place, keeping the filter. No-op while closed.
+   */
+  refresh(): void {
+    if (!this.isOpen()) return;
+    if (this.menu !== null) this.menuItems = this.host.submenu(this.menu);
+    this.render();
+  }
+
   private setMenu(menu: string | null): void {
     this.endPreview();
     this.menu = menu;
@@ -664,6 +681,7 @@ export class CommandPalette {
       return items.map((item) => ({
         itemId: item.id,
         label: item.label,
+        disabled: item.disabled,
         hint: item.hint,
         action: () => {
           this.close();
@@ -762,7 +780,8 @@ export class CommandPalette {
     if (this.rows.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'island-empty';
-      empty.textContent = inMenu && this.menu === 'recent' ? 'No recent pastes' : 'No matches';
+      const unfiltered = this.input.value === '';
+      empty.textContent = (inMenu && unfiltered && MENU_EMPTY[this.menu!]) || 'No matches';
       frag.appendChild(empty);
     }
     this.rows.forEach((row, i) => {
@@ -873,6 +892,13 @@ const SAVE_ICON_PATHS: Record<SaveIcon, string[]> = {
       'C3.2 5.5 3.8 6.3 4.5 6.4 C4.4 4.6 4.2 2.6 5 0.9 Z',
   ],
   lock: ['M1.6 5.6 H8.4 V10.9 H1.6 Z', 'M3.1 5.6 V3.9 A1.9 1.9 0 0 1 6.9 3.9 V5.6'],
+  // An eye, struck through: nobody else sees it.
+  private: [
+    'M0.9 6.4 C2.1 4.2 3.5 3.2 5 3.2 C6.5 3.2 7.9 4.2 9.1 6.4 ' +
+      'C7.9 8.6 6.5 9.6 5 9.6 C3.5 9.6 2.1 8.6 0.9 6.4 Z',
+    'M5 5.2 A1.2 1.2 0 1 0 5 7.6 A1.2 1.2 0 1 0 5 5.2 Z',
+    'M1.4 10.9 L8.6 1.9',
+  ],
 };
 
 /** Modifier key outlines in a 12x12 box, stroked in currentColor. */

@@ -15,6 +15,21 @@ export interface MockStore {
   lockFailures(key: string): number | undefined;
   failNextSave(): void;
   failNextLoad(): void;
+  /** Sign-in mock (setupMockApi with { auth: true }). */
+  auth: {
+    signedIn: boolean;
+    /** Keys saved while signed in. */
+    owned: Set<string>;
+    /** Keys saved with ?private=1. */
+    privateKeys: Set<string>;
+  };
+}
+
+export interface MockApiOptions {
+  /** Sign-in is configured: /auth/* answer, saves while signed in are owned. */
+  auth?: boolean;
+  /** Display name the mock provider signs in as. */
+  userName?: string;
 }
 
 /**
@@ -26,7 +41,7 @@ export interface MockStore {
  *
  * Key generation: sequential testkey0, testkey1, ... for predictability.
  */
-export async function setupMockApi(page: Page): Promise<MockStore> {
+export async function setupMockApi(page: Page, options: MockApiOptions = {}): Promise<MockStore> {
   // Make view transitions synchronous so the callback runs immediately rather
   // than being scheduled before the next frame. Without this, Playwright can
   // send fill()/click() commands before the transition callback fires, which
@@ -57,6 +72,8 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
   let lastParams: URLSearchParams | undefined;
   let saveShouldFail = false;
   let loadShouldFail = false;
+  const auth = { signedIn: false, owned: new Set<string>(), privateKeys: new Set<string>() };
+  const userName = options.userName ?? 'Ada Lovelace';
 
   const store: MockStore = {
     get: (key) => docs.get(key),
@@ -79,7 +96,14 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
     failNextLoad: () => {
       loadShouldFail = true;
     },
+    auth,
   };
+  /** What GET answers carry for ownership; a private paste is a 404 for others. */
+  const ownership = (key: string) => ({
+    ...(auth.signedIn && auth.owned.has(key) ? { mine: true } : {}),
+    ...(auth.privateKeys.has(key) ? { private: true } : {}),
+  });
+  const hidden = (key: string) => auth.privateKeys.has(key) && !auth.signedIn;
 
   // POST /documents[?expires=..&burn=1] -- create new paste
   await page.route(/\/documents(\?.*)?$/, async (route) => {
@@ -96,9 +120,16 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
     const body = isJson ? route.request().postDataJSON() : null;
     const content = body ? body.content : (route.request().postData() ?? '');
     const params = new URL(route.request().url()).searchParams;
+    const isPrivate = params.get('private') === '1';
+    if (isPrivate && !auth.signedIn) {
+      await route.fulfill({ status: 401, body: '{"message":"Sign in"}' });
+      return;
+    }
     const key = `testkey${counter++}`;
     const burn = params.get('burn') === '1';
     docs.set(key, content);
+    if (auth.signedIn) auth.owned.add(key);
+    if (isPrivate) auth.privateKeys.add(key);
     if (burn) burnKeys.add(key);
     if (body?.lock) locks.set(key, { ...body.lock, failures: 0 });
     lastSavedKey = key;
@@ -111,6 +142,7 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
         expiresAt: null,
         ...(burn && { burn: true }),
         ...(body?.lock && { locked: true }),
+        ...(isPrivate && { private: true }),
       }),
     });
   });
@@ -128,14 +160,14 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
     }
     const url = new URL(route.request().url());
     const key = url.pathname.split('/').pop() ?? '';
-    const content = docs.get(key);
+    const content = hidden(key) ? undefined : docs.get(key);
     const lock = locks.get(key);
     if (content !== undefined && lock) {
       const burn = burnKeys.has(key) ? { burn: true } : {};
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ key, locked: true, salt: lock.salt, ...burn }),
+        body: JSON.stringify({ key, locked: true, salt: lock.salt, ...burn, ...ownership(key) }),
       });
     } else if (content !== undefined && burnKeys.has(key)) {
       const peek = url.searchParams.has('peek');
@@ -153,7 +185,7 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ content, key, ...(frozen && { frozen }) }),
+        body: JSON.stringify({ content, key, ...(frozen && { frozen }), ...ownership(key) }),
       });
     } else {
       await route.fulfill({
@@ -189,5 +221,80 @@ export async function setupMockApi(page: Page): Promise<MockStore> {
     return json(200, { key, content, ...(burn && { burn: true }) });
   });
 
+  if (options.auth) await installAuthRoutes(page, store, docs, locks, burnKeys, userName);
   return store;
+}
+
+async function installAuthRoutes(
+  page: Page,
+  store: MockStore,
+  docs: Map<string, string>,
+  locks: Map<string, unknown>,
+  burnKeys: Set<string>,
+  userName: string
+): Promise<void> {
+  const { auth } = store;
+  const json = (status: number, data: unknown) => ({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(data),
+  });
+
+  await page.route('**/auth/me', (route) =>
+    route.fulfill(json(200, { enabled: true, user: auth.signedIn ? { name: userName } : null }))
+  );
+  // The provider round trip, collapsed: sign in and come straight back.
+  await page.route('**/auth/login**', async (route) => {
+    const url = new URL(route.request().url());
+    auth.signedIn = true;
+    await page.context().addCookies([{ name: 'pb_in', value: '1', url: url.origin }]);
+    await route.fulfill({
+      status: 302,
+      headers: { Location: url.searchParams.get('return') ?? '/' },
+    });
+  });
+  await page.route('**/auth/logout', async (route) => {
+    auth.signedIn = false;
+    await page.context().clearCookies({ name: 'pb_in' });
+    await route.fulfill({ status: 204 });
+  });
+
+  // GET /documents: own pastes, newest first.
+  await page.route(/\/documents(\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    if (!auth.signedIn) return route.fulfill(json(401, { message: 'Sign in' }));
+    const items = [...auth.owned]
+      .filter((key) => docs.has(key))
+      .reverse()
+      .map((key) => {
+        const content = docs.get(key)!;
+        const locked = locks.has(key);
+        const burn = burnKeys.has(key);
+        return {
+          key,
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          size: content.length,
+          ...(burn && { burn: true }),
+          ...(locked && { locked: true }),
+          ...(auth.privateKeys.has(key) && { private: true }),
+          ...(!burn && !locked && { preview: content.split('\n')[0] }),
+        };
+      });
+    return route.fulfill(json(200, { items }));
+  });
+
+  // DELETE /documents/:id
+  await page.route(/\/documents\/[^/?]+$/, async (route) => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    const key = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+    if (!auth.signedIn) return route.fulfill(json(401, { message: 'Sign in' }));
+    if (!auth.owned.has(key) || !docs.has(key)) {
+      return route.fulfill(json(404, { message: 'Document not found' }));
+    }
+    docs.delete(key);
+    auth.owned.delete(key);
+    auth.privateKeys.delete(key);
+    return route.fulfill({ status: 204 });
+  });
 }
