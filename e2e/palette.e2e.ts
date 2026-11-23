@@ -253,7 +253,24 @@ test.describe('Command palette', () => {
     await openPalette(page);
     await expect(rows.first()).toContainText('Save');
     await expect(rows.first()).not.toHaveAttribute('aria-disabled', 'true');
-    await expect(rows.first().locator('kbd')).toHaveText('Ctrl+S');
+    // The shortcut is drawn as key caps (a Ctrl icon, then S); its text form is the label.
+    const keys = rows.first().locator('kbd');
+    await expect(keys).toHaveAttribute('aria-label', 'Ctrl+S');
+    await expect(keys.locator('.island-key')).toHaveCount(2);
+    await expect(keys.locator('svg[data-mod="ctrl"]')).toBeVisible();
+    await expect(keys.locator('.island-key').last()).toHaveText('S');
+    await expect(page.getByRole('option', { name: 'Save Ctrl+S' })).toBeVisible();
+
+    // Alt+Shift commands get an icon per modifier; state hints stay plain text.
+    const newKeys = rows
+      .filter({ has: page.locator('span', { hasText: /^New paste$/ }) })
+      .locator('kbd');
+    await expect(newKeys).toHaveAttribute('aria-label', 'Alt+Shift+P');
+    await expect(newKeys.locator('svg[data-mod="alt"]')).toBeVisible();
+    await expect(newKeys.locator('svg[data-mod="shift"]')).toBeVisible();
+    await expect(newKeys.locator('.island-key').last()).toHaveText('P');
+    const expiry = rows.filter({ has: page.locator('span', { hasText: /^Expires$/ }) });
+    await expect(expiry.locator('kbd svg')).toHaveCount(0);
   });
 
   test('a disabled Save matched by a filter does nothing on Enter', async ({ page }) => {
