@@ -66,6 +66,7 @@ html[data-theme="solarized-light"],
     --syntax-l-warm:     0.54;
     --syntax-l-text:     0.45;
     --syntax-l-dim:      0.63;
+    --syntax-l-comment:  0.575;
     --syntax-l-addition: 0.52;
     --syntax-c-calm:     0.094; /* ceiling set by cyan, the constant */
     --syntax-c-vivid:    0.172; /* ceiling set by orange */
@@ -76,11 +77,6 @@ html[data-theme="solarized-light"],
     --syntax-type:        oklch(from var(--sol-yellow) var(--syntax-l-accent) 0.111 h);
     --syntax-definition:  oklch(from var(--sol-blue)   var(--syntax-l-accent) 0.136 h);
     --syntax-addition:    oklch(from var(--sol-green)  var(--syntax-l-addition) 0.123 h);
-
-    /* comments: secondary text on the background-highlight tone (base2),
-       the Solarized way, instead of the inverted dark plate */
-    --syntax-comment:     oklch(from var(--sol-base01) 0.50 c h);
-    --syntax-comment-bg:  var(--sol-base2);
 }
 
 /* --- GitHub: GitHub Primer colors ---------------------------------------- */
@@ -139,6 +135,7 @@ html[data-theme="github"],
     --syntax-l-warm:     0.52;
     --syntax-l-text:     0.46;
     --syntax-l-dim:      0.645;
+    --syntax-l-comment:  0.595;
     --syntax-l-addition: 0.44;
     --syntax-c-calm:     0.15;
     --syntax-c-vivid:    0.12;
@@ -191,6 +188,7 @@ html[data-theme="atom-one-dark"],
     --syntax-l-warm:     0.72;
     --syntax-l-text:     0.78;
     --syntax-l-dim:      0.582;
+    --syntax-l-comment:  0.635;
     --syntax-l-addition: 0.82;
     --syntax-c-calm:     0.1;
     --syntax-c-vivid:    0.16;
@@ -243,6 +241,7 @@ html[data-theme="monokai"],
     --syntax-l-warm:     0.705;
     --syntax-l-text:     0.765;
     --syntax-l-dim:      0.567;
+    --syntax-l-comment:  0.62;
     --syntax-l-addition: 0.815;
     --syntax-c-calm:     0.125;
     --syntax-c-vivid:    0.16;

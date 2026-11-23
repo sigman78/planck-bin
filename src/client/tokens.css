@@ -124,7 +124,8 @@
     --syntax-l-accent: 0.78;  /* default accent */
     --syntax-l-warm:   0.71;  /* red/orange: lower L keeps them saturated in gamut */
     --syntax-l-text:   0.758; /* body text */
-    --syntax-l-dim:    0.563; /* punctuation and comment plate, dim on purpose */
+    --syntax-l-dim:    0.563; /* punctuation, dim on purpose */
+    --syntax-l-comment: 0.615; /* comments: muted, a step above dim so prose stays legible */
     --syntax-l-addition: 0.80; /* additions, a step past accent so new lines stand out */
 
     /* chroma tiers (OKLCH C) */
@@ -138,6 +139,7 @@
     /* sources: each role takes its hue (neutrals also their chroma) from here */
     --syntax-src-text:        var(--sol-base1);
     --syntax-src-punctuation: var(--sol-base01);
+    --syntax-src-comment:     var(--syntax-src-punctuation);
     --syntax-src-keyword:     var(--sol-yellow);
     --syntax-src-definition:  var(--sol-blue);
     --syntax-src-constant:    var(--sol-cyan);
@@ -148,6 +150,9 @@
     /* neutrals: primitive chroma kept, lightness from tier */
     --syntax-text:        oklch(from var(--syntax-src-text) var(--syntax-l-text) c h); /* 7.0 */
     --syntax-punctuation: oklch(from var(--syntax-src-punctuation) var(--syntax-l-dim)  c h); /* 3.3 */
+    /* comments: muted secondary text on the code background, no plate. The
+       theme's own comment color, lifted to a legible 3.5-4.5 */
+    --syntax-comment:     oklch(from var(--syntax-src-comment) var(--syntax-l-comment) c h); /* 4.1 */
 
     /* calm accents; keyword shares the definition tier, and yellow reads
        slightly lower in contrast than blue there, keeping keywords just
@@ -163,8 +168,5 @@
     --syntax-deletion:    oklch(from var(--syntax-src-deletion) var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.4 */
     --syntax-addition:    oklch(from var(--syntax-src-addition) var(--syntax-l-addition) var(--syntax-c-vivid) h); /* 8.3 */
 
-    /* comments: background-colored text on the dim plate */
-    --syntax-comment:     var(--syntax-bg);
-    --syntax-comment-bg:  var(--syntax-punctuation);
     --syntax-diff:        var(--syntax-definition);
 }

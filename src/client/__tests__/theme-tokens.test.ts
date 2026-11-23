@@ -38,6 +38,7 @@ const CONTRACT = [
   '--syntax-l-warm',
   '--syntax-l-text',
   '--syntax-l-dim',
+  '--syntax-l-comment',
   '--syntax-l-addition',
   '--syntax-c-calm',
   '--syntax-c-vivid',
@@ -70,6 +71,9 @@ const SYNTAX_MIN_BY_THEME: Record<string, Partial<Record<string, number>>> = {
     addition: 4.5,
   },
 };
+
+/** WCAG contrast band of comments on the theme background: muted, still legible. */
+const COMMENT_BAND: [number, number] = [3.5, 4.5];
 
 /** UI text on its surface: [fg, bg, minimum]. */
 const UI_MIN: [string, string, number][] = [
@@ -142,16 +146,22 @@ describe.each(THEMES)('$label colors', (theme) => {
     );
   });
 
-  it('dims punctuation on purpose, and comments read on their plate', () => {
+  it('dims punctuation on purpose', () => {
     const punctuation = resolveColor('--syntax-punctuation', scope);
     expect(inSrgb(punctuation)).toBe(true);
     expect(contrast(punctuation, bg)).toBeGreaterThanOrEqual(3);
     expect(contrast(punctuation, bg)).toBeLessThan(4.5);
-    const comment = contrast(
-      resolveColor('--syntax-comment', scope),
-      resolveColor('--syntax-comment-bg', scope)
-    );
-    expect(comment).toBeGreaterThanOrEqual(3);
+  });
+
+  it('mutes comments: legible on the code background, dimmer than text', () => {
+    const comment = resolveColor('--syntax-comment', scope);
+    expect(inSrgb(comment)).toBe(true);
+    const ratio = contrast(comment, bg);
+    expect(ratio).toBeGreaterThanOrEqual(COMMENT_BAND[0]);
+    expect(ratio).toBeLessThanOrEqual(COMMENT_BAND[1]);
+    expect(ratio).toBeLessThan(contrast(resolveColor('--syntax-text', scope), bg));
+    // No plate: the role is a foreground color only.
+    expect(scope.has('--syntax-comment-bg')).toBe(false);
   });
 
   it.each(UI_MIN)('%s on %s', (fg, surface, min) => {
@@ -173,6 +183,7 @@ describe('Solarized Dark (default) syntax ladder', () => {
   it.each([
     ['text', 7.0],
     ['punctuation', 3.3],
+    ['comment', 4.1],
     ['keyword', 7.5],
     ['definition', 7.6],
     ['constant', 9.6],

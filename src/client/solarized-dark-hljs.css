@@ -12,7 +12,7 @@
     type        types, built-ins (the keyword color unless a theme splits it)
     definition  function/class names at declaration, selectors, sections
     constant    strings, numbers, literals, regexp, symbols
-    comment     inverted: dark text on a dimmed plate
+    comment     muted secondary text on the code background, no plate
     punctuation punctuation and operators, dimmed
     special     meta, preprocessor
   No bold/italic for syntax; markdown strong/emphasis keep theirs.
@@ -40,15 +40,11 @@ code.hljs {
 .hljs-params,
 .hljs-property {}
 
-/* Comments: an inverted plate, so they read as asides */
+/* Comments: muted, dimmer than body text, on the normal background */
 .hljs-comment,
 .hljs-quote,
 .hljs-doctag {
   color: var(--syntax-comment);
-  background-color: var(--syntax-comment-bg);
-  border-radius: 2px;
-/*  padding: 0.05em 0.25em;
-  margin: 0 -0.25em; */
 }
 
 /* Keywords, types, variables, built-ins */
