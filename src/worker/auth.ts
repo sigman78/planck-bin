@@ -188,6 +188,7 @@ auth.get('/auth/callback', async (c) => {
       uid: await uidOf(claims.iss, claims.sub),
       name: displayName(claims),
       ...(claims.email ? { email: claims.email } : {}),
+      ...(claims.email && isEmailVerified(claims) ? { ev: true as const } : {}),
     });
     setSessionCookies(c, sealed, SESSION_TTL);
     return c.redirect(returnTo, 303);

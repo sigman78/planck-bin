@@ -79,6 +79,10 @@ export interface FakeIdp {
   calls: string[];
   /** Body of the last token request. */
   lastTokenRequest: URLSearchParams | null;
+  /** Authorization header of the last token request. */
+  lastTokenAuth: string | null;
+  /** token_endpoint_auth_methods_supported in discovery; undefined = not listed. */
+  authMethods?: string[];
   /** Returns the id_token for a code exchange; default: a valid token for the nonce. */
   tokenFor: (nonce: string) => Promise<string>;
   /** Make every request to the provider fail (network error). */
@@ -98,6 +102,7 @@ export async function installFakeIdp(): Promise<FakeIdp & { nonce: string }> {
     keys: [rsa],
     calls: [],
     lastTokenRequest: null,
+    lastTokenAuth: null,
     nonce: '',
     down: false,
     tokenFor: (nonce) => signJwt(rsa, claimsFor(nonce)),
@@ -117,6 +122,7 @@ export async function installFakeIdp(): Promise<FakeIdp & { nonce: string }> {
         token_endpoint: `${ISSUER}/token`,
         jwks_uri: `${ISSUER}/jwks`,
         id_token_signing_alg_values_supported: ['RS256', 'ES256'],
+        ...(idp.authMethods && { token_endpoint_auth_methods_supported: idp.authMethods }),
       });
     }
     if (url === `${ISSUER}/jwks`) {
@@ -124,6 +130,7 @@ export async function installFakeIdp(): Promise<FakeIdp & { nonce: string }> {
     }
     if (url === `${ISSUER}/token`) {
       idp.lastTokenRequest = new URLSearchParams(String(init?.body ?? ''));
+      idp.lastTokenAuth = new Headers(init?.headers).get('Authorization');
       return Response.json({ id_token: await idp.tokenFor(idp.nonce), token_type: 'Bearer' });
     }
     return new Response('not found', { status: 404 });

@@ -81,12 +81,16 @@ export interface AuthConfig {
   clientId: string;
   clientSecret: string;
   sessionSecret: string;
-  /** Lowercased; null = any account at the issuer may sign in. */
+  /**
+   * Lowercased; null = any account at the issuer may sign in (variable unset or
+   * empty). A value that names no address (", ") is an empty list: nobody.
+   */
   allowedEmails: string[] | null;
 }
 
 const MIN_SESSION_SECRET_LENGTH = 32;
 let warnedPartialAuth = false;
+let warnedEmptyAllowlist = false;
 
 /**
  * Sign-in is on only when the issuer, client id, client secret and session
@@ -109,16 +113,22 @@ export function getAuthConfig(env: Env): AuthConfig | null {
     }
     return null;
   }
-  const emails = String(env.OIDC_ALLOWED_EMAILS ?? '')
+  const rawEmails = String(env.OIDC_ALLOWED_EMAILS ?? '');
+  const emails = rawEmails
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter((e) => e !== '');
+  // Set but naming nobody is a typo, not "anyone": fail closed.
+  if (rawEmails !== '' && emails.length === 0 && !warnedEmptyAllowlist) {
+    warnedEmptyAllowlist = true;
+    console.error('OIDC_ALLOWED_EMAILS names no address: nobody can sign in');
+  }
   return {
     issuer,
     clientId,
     clientSecret,
     sessionSecret,
-    allowedEmails: emails.length > 0 ? emails : null,
+    allowedEmails: rawEmails === '' ? null : emails,
   };
 }
 

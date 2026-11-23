@@ -684,6 +684,10 @@ export class CommandPalette {
         disabled: item.disabled,
         hint: item.hint,
         action: () => {
+          if (item.keepOpen) {
+            this.host.runSubmenu(menuId, item.id);
+            return true;
+          }
           this.close();
           this.host.runSubmenu(menuId, item.id);
         },

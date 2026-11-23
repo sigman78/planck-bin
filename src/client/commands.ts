@@ -45,6 +45,8 @@ export interface PaletteItem {
   current?: boolean;
   /** Listed but not runnable in this context (shown greyed out). */
   disabled?: boolean;
+  /** Submenu item: picking it keeps the palette open (e.g. load more rows). */
+  keepOpen?: boolean;
 }
 
 export interface Command extends PaletteItem {

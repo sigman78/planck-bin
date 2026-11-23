@@ -30,6 +30,8 @@ export interface MockApiOptions {
   auth?: boolean;
   /** Display name the mock provider signs in as. */
   userName?: string;
+  /** GET /documents page size (the worker uses 50). */
+  pageSize?: number;
 }
 
 /**
@@ -221,7 +223,9 @@ export async function setupMockApi(page: Page, options: MockApiOptions = {}): Pr
     return json(200, { key, content, ...(burn && { burn: true }) });
   });
 
-  if (options.auth) await installAuthRoutes(page, store, docs, locks, burnKeys, userName);
+  if (options.auth) {
+    await installAuthRoutes(page, store, docs, locks, burnKeys, userName, options.pageSize ?? 50);
+  }
   return store;
 }
 
@@ -231,7 +235,8 @@ async function installAuthRoutes(
   docs: Map<string, string>,
   locks: Map<string, unknown>,
   burnKeys: Set<string>,
-  userName: string
+  userName: string,
+  pageSize: number
 ): Promise<void> {
   const { auth } = store;
   const json = (status: number, data: unknown) => ({
@@ -263,25 +268,26 @@ async function installAuthRoutes(
   await page.route(/\/documents(\?.*)?$/, async (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     if (!auth.signedIn) return route.fulfill(json(401, { message: 'Sign in' }));
-    const items = [...auth.owned]
-      .filter((key) => docs.has(key))
-      .reverse()
-      .map((key) => {
-        const content = docs.get(key)!;
-        const locked = locks.has(key);
-        const burn = burnKeys.has(key);
-        return {
-          key,
-          createdAt: new Date().toISOString(),
-          expiresAt: null,
-          size: content.length,
-          ...(burn && { burn: true }),
-          ...(locked && { locked: true }),
-          ...(auth.privateKeys.has(key) && { private: true }),
-          ...(!burn && !locked && { preview: content.split('\n')[0] }),
-        };
-      });
-    return route.fulfill(json(200, { items }));
+    // The cursor is just the offset here.
+    const offset = Number(new URL(route.request().url()).searchParams.get('before') ?? 0);
+    const all = [...auth.owned].filter((key) => docs.has(key)).reverse();
+    const next = offset + pageSize < all.length ? String(offset + pageSize) : undefined;
+    const items = all.slice(offset, offset + pageSize).map((key) => {
+      const content = docs.get(key)!;
+      const locked = locks.has(key);
+      const burn = burnKeys.has(key);
+      return {
+        key,
+        createdAt: new Date().toISOString(),
+        expiresAt: null,
+        size: content.length,
+        ...(burn && { burn: true }),
+        ...(locked && { locked: true }),
+        ...(auth.privateKeys.has(key) && { private: true }),
+        ...(!burn && !locked && { preview: content.split('\n')[0] }),
+      };
+    });
+    return route.fulfill(json(200, { items, ...(next && { next }) }));
   });
 
   // DELETE /documents/:id

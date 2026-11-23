@@ -24,6 +24,8 @@ export interface ProviderMetadata {
   authorization_endpoint: string;
   token_endpoint: string;
   jwks_uri: string;
+  /** Absent = client_secret_basic only (OIDC Discovery 1.0, section 3). */
+  token_endpoint_auth_methods_supported?: string[];
 }
 
 export interface IdTokenClaims {
@@ -278,6 +280,18 @@ export function authorizationUrl(
   return url.toString();
 }
 
+/** Basic unless the provider lists only client_secret_post of the two. */
+export function tokenAuthMethod(
+  metadata: ProviderMetadata
+): 'client_secret_basic' | 'client_secret_post' {
+  const methods = metadata.token_endpoint_auth_methods_supported;
+  if (!Array.isArray(methods) || methods.length === 0) return 'client_secret_basic';
+  if (methods.includes('client_secret_basic')) return 'client_secret_basic';
+  return methods.includes('client_secret_post') ? 'client_secret_post' : 'client_secret_basic';
+}
+
+const formEncode = (value: string) => new URLSearchParams({ v: value }).toString().slice(2);
+
 /** Trade the authorization code for tokens; returns the raw ID token. */
 export async function exchangeCode(
   metadata: ProviderMetadata,
@@ -294,15 +308,22 @@ export async function exchangeCode(
     code: params.code,
     redirect_uri: params.redirectUri,
     client_id: params.clientId,
-    client_secret: params.clientSecret,
     code_verifier: params.verifier,
   });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    Accept: 'application/json',
+  };
+  if (tokenAuthMethod(metadata) === 'client_secret_post') {
+    body.set('client_secret', params.clientSecret);
+  } else {
+    // RFC 6749 2.3.1: both parts form-encoded before base64.
+    const pair = `${formEncode(params.clientId)}:${formEncode(params.clientSecret)}`;
+    headers.Authorization = `Basic ${btoa(pair)}`;
+  }
   const tokens = (await fetchJson(metadata.token_endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
-    },
+    headers,
     body,
   })) as { id_token?: unknown };
   if (typeof tokens.id_token !== 'string') throw new OidcError('token response has no id_token');

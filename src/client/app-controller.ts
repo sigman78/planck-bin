@@ -66,6 +66,8 @@ const LOCKED_PREVIEW = 'Protected paste';
 const PRIVATE_PREVIEW = 'Private paste';
 /** My pastes row standing in for the list while it loads. */
 const MINE_LOADING_ID = '/loading';
+/** My pastes row that fetches the next page. */
+const MINE_MORE_ID = '/more';
 
 /** A protected paste behind the passphrase gate. */
 interface PendingLock {
@@ -113,6 +115,10 @@ export class AppController {
   private auth = new AuthClient();
   /** My pastes as last fetched; null = not loaded (fetched when the menu opens). */
   private mineItems: PaletteItem[] | null = null;
+  /** Cursor of the next My pastes page; undefined = no more. */
+  private mineNext: string | undefined;
+  /** Leaving for the identity provider: the draft is saved, skip the leave prompt. */
+  private leavingToSignIn = false;
   /** The unread burn paste behind the reveal gate. */
   private pendingBurn: ParsedPath | null = null;
   /** Passphrase (normalized) the next save is protected with; resets after each save. */
@@ -254,7 +260,8 @@ export class AppController {
     );
     window.addEventListener('beforeunload', (e) => {
       // Unsaved text, or a revealed burn paste (no copy is left anywhere else).
-      const unsaved = this.viewMode === 'editing' && this.document.content.trim() !== '';
+      const unsaved =
+        this.viewMode === 'editing' && this.document.content.trim() !== '' && !this.leavingToSignIn;
       if (unsaved || this.document.burn === 'burned') {
         e.preventDefault();
         e.returnValue = '';
@@ -1042,6 +1049,7 @@ export class AppController {
       this.paintTheme(itemId);
     } else if (menuId === 'mine') {
       if (itemId === MINE_LOADING_ID) return;
+      if (itemId === MINE_MORE_ID) return void this.loadMine(this.mineNext);
       if (!(this.viewMode === 'presenting' && itemId === this.document.key)) {
         this.openPath(`/${itemId}`);
       }
@@ -1080,6 +1088,10 @@ export class AppController {
       const content = this.view.getContentFromDOM();
       if (content.trim()) this.draft.saveNow(content);
     }
+    this.leavingToSignIn = true;
+    // Cancelled by a burn prompt or bfcache: unsaved edits matter again.
+    window.addEventListener('pageshow', () => (this.leavingToSignIn = false), { once: true });
+    setTimeout(() => (this.leavingToSignIn = false), 5000);
     const { pathname, search, hash } = window.location;
     this.auth.signIn(`${pathname}${search}${hash}`);
   }
@@ -1093,27 +1105,44 @@ export class AppController {
     }
     this.privateNext = false;
     this.mineItems = null;
-    this.document.mine = false;
+    this.mineNext = undefined;
     // Memory copies carry `mine` and private text: none survive a sign-out.
     this.session.forgetAll();
+    if (this.document.private) {
+      // Its text is for the owner only: leave nothing of it in the tab.
+      this.newDocument(true);
+      this.view.clearViewer();
+    } else {
+      this.document.mine = false;
+    }
     this.syncChrome();
     this.notify.toast('Signed out', 'info', { brief: true });
   }
 
-  /** Fetch My pastes for the open menu. */
-  private async loadMine(): Promise<void> {
-    let items: PaletteItem[];
-    try {
-      const list = await this.session.listMine();
-      items = list.items.map((p) => this.mineItem(p));
-    } catch {
-      items = [{ id: MINE_LOADING_ID, label: 'Could not load your pastes', disabled: true }];
-      this.mineItems = items;
+  /** Fetch a page of My pastes for the open menu: the first, or the one after `before`. */
+  private async loadMine(before?: string): Promise<void> {
+    const shown = before ? (this.mineItems ?? []).filter((i) => i.id !== MINE_MORE_ID) : [];
+    if (before) {
+      this.mineItems = [...shown, { id: MINE_LOADING_ID, label: 'Loading...', disabled: true }];
       this.palette.refresh();
-      this.mineItems = null; // try again next time
+    }
+    try {
+      const list = await this.session.listMine(before);
+      this.mineNext = list.next;
+      this.mineItems = [...shown, ...list.items.map((p) => this.mineItem(p))];
+      if (list.next) {
+        this.mineItems.push({ id: MINE_MORE_ID, label: 'Load more', keepOpen: true });
+      }
+    } catch {
+      const failed = { id: MINE_LOADING_ID, label: 'Could not load your pastes', disabled: true };
+      this.mineItems = [...shown, failed];
+      this.palette.refresh();
+      // Try again next time: keep the rows so far, offer the rest again.
+      this.mineItems = before
+        ? [...shown, { id: MINE_MORE_ID, label: 'Load more', keepOpen: true }]
+        : null;
       return;
     }
-    this.mineItems = items;
     this.palette.refresh();
   }
 

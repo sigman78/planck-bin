@@ -25,7 +25,7 @@ const FLASHES: Record<AuthFlash, true> = { 'signin-failed': true, denied: true, 
 export class AuthClient {
   /** null until known (see refresh). */
   state: AuthState | null = null;
-  private pending: Promise<AuthState> | null = null;
+  private pending: Promise<AuthState | null> | null = null;
 
   /** A session cookie may exist: worth asking at startup. */
   hasHint(): boolean {
@@ -40,16 +40,19 @@ export class AuthClient {
     return this.state?.user != null;
   }
 
-  /** Ask the server; failures leave sign-in looking off rather than throwing. */
-  refresh(): Promise<AuthState> {
+  /**
+   * Ask the server. A 404 (a worker without sign-in routes) means off; a
+   * network or server error keeps the last known state (null at first), so
+   * the next palette open asks again instead of hiding Sign in until reload.
+   */
+  refresh(): Promise<AuthState | null> {
     this.pending ??= (async () => {
       try {
         const response = await fetch('/auth/me', { cache: 'no-store' });
-        this.state = response.ok
-          ? ((await response.json()) as AuthState)
-          : { enabled: false, user: null };
+        if (response.ok) this.state = (await response.json()) as AuthState;
+        else if (response.status === 404) this.state = { enabled: false, user: null };
       } catch {
-        this.state ??= { enabled: false, user: null };
+        // offline: unknown, try again later
       } finally {
         this.pending = null;
       }

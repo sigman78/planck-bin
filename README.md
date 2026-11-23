@@ -109,7 +109,9 @@ Sign-in is off unless all four of `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_
 | `OIDC_ALLOWED_EMAILS` | Optional comma-separated list of emails allowed to sign in; unset = anyone |
 
 Register `https://YOUR-HOST/auth/callback` as the redirect URI. The worker requests the
-`openid profile email` scopes and uses the authorization code flow with PKCE. Generate the session
+`openid profile email` scopes and uses the authorization code flow with PKCE. The client
+secret goes in an HTTP Basic header (`client_secret_basic`), or in the request body when the
+provider's discovery document lists only `client_secret_post`. Generate the session
 secret with `openssl rand -base64 32`. Changing it signs everyone out.
 
 - Google: issuer `https://accounts.google.com`. In the Google Cloud console create an OAuth client
@@ -119,7 +121,10 @@ secret with `openssl rand -base64 32`. Changing it signs everyone out.
 
 With `OIDC_ALLOWED_EMAILS` set, only those addresses may sign in, and only when the provider
 reports the email as verified. The list is checked again on every request, so removing an address
-takes effect at once. Without it, any account at the provider may sign in.
+takes effect at once. Without it (unset or empty), any account at the provider may sign in. A
+value that names no address, such as `,`, lets nobody in and logs a warning. A session records
+whether its email was verified, so turning the allowlist on later does not let in a session
+whose email was never verified.
 
 A session lasts 30 days and is renewed while in use. It is a signed cookie; the server keeps no
 session table. A user is identified by the issuer and the provider's subject ID, so switching
@@ -246,13 +251,15 @@ With sign-in configured, **Sign in** goes to the provider and comes back to the 
 text is kept as a draft). Signed in, the palette adds:
 
 - **My pastes**: your pastes on this server, from any browser, newest first. Private and
-  protected pastes are marked with a lock, burn pastes with a flame. Enter opens one.
+  protected pastes are marked with a lock, burn pastes with a flame. Enter opens one. The list
+  loads 50 at a time; **Load more** at the end fetches the next 50.
 - **Make private** (while editing): the next save is private. It works like burn after reading:
   the Save chip shows a lock (the same icon as for a passphrase; the tooltip tells them apart),
   and running it again (**Don't make private**) turns it off. Burn and private turn each other
   off. Private pastes appear in the recent list as "Private paste", without their text.
 - **Delete paste** (on your own paste): asks, then deletes it from the server.
-- **Sign out**, with your name as its hint.
+- **Sign out**, with your name as its hint. If a private paste is on screen, it is removed from
+  the page and an empty editor opens.
 
 Printing (the browser's Print) produces a plain black-and-white source listing: numbered lines,
 long lines wrapped under their own number, and the paste address, line count and page numbers in

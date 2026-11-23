@@ -27,6 +27,8 @@ export interface Session {
   /** Display name for the palette. */
   name: string;
   email?: string;
+  /** The provider reported `email` as verified; absent = not verified. */
+  ev?: true;
   /** Unix seconds. */
   iat: number;
   exp: number;
@@ -170,7 +172,7 @@ export function setFlashCookie(c: AppContext, value: string): void {
 
 export async function createSession(
   config: AuthConfig,
-  identity: { uid: string; name: string; email?: string },
+  identity: { uid: string; name: string; email?: string; ev?: true },
   now = Math.floor(Date.now() / 1000)
 ): Promise<{ session: Session; sealed: string }> {
   const session: Session = { v: 1, ...identity, iat: now, exp: now + SESSION_TTL };
@@ -200,7 +202,10 @@ async function resolveViewer(c: AppContext): Promise<Session | null> {
   const session = await unseal<Session>('session', value, config.sessionSecret);
   if (!session || session.v !== 1 || typeof session.uid !== 'string') return null;
   // The allowlist is configuration: removing an email takes effect at once.
-  if (config.allowedEmails !== null && !isAllowed(config, session.email, true)) return null;
+  // A session from before the allowlist may carry an unverified email: it must not pass.
+  if (config.allowedEmails !== null && !isAllowed(config, session.email, session.ev === true)) {
+    return null;
+  }
   return session;
 }
 

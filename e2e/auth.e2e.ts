@@ -71,6 +71,33 @@ test.describe('Sign-in', () => {
     await expect(page.locator(S.editor)).toHaveValue('half-written note');
   });
 
+  test('a failed first check does not hide Sign in until reload', async ({ page }) => {
+    await setupMockApi(page, { auth: true });
+    let failures = 1;
+    await page.route('**/auth/me', (route) => (failures-- > 0 ? route.abort() : route.fallback()));
+    await page.goto('/');
+    await openPalette(page);
+    await page.locator(S.paletteInput).fill('sign');
+    await expect(paletteLabel(page, 'Sign in')).toHaveCount(0);
+    await closePalette(page);
+    await openPalette(page);
+    await page.locator(S.paletteInput).fill('sign');
+    await expect(paletteLabel(page, 'Sign in')).toHaveCount(1);
+  });
+
+  test('the sign-in round trip does not ask to leave the page', async ({ page }) => {
+    await start(page);
+    await page.locator(S.editor).fill('half-written note');
+    let asked = false;
+    page.on('dialog', (dialog) => {
+      asked = true;
+      void dialog.accept();
+    });
+    await runCommand(page, 'Sign in');
+    await expect(page.locator(S.editor)).toHaveValue('half-written note');
+    expect(asked).toBe(false);
+  });
+
   test('reports a failed sign-in once', async ({ page }) => {
     await setupMockApi(page, { auth: true });
     await page
@@ -80,6 +107,25 @@ test.describe('Sign-in', () => {
     await expect(page.locator(S.toast)).toHaveText('This account may not sign in here.');
     expect((await page.context().cookies()).some((c) => c.name === 'pb_flash')).toBe(false);
   });
+});
+
+test('My pastes loads further pages on request', async ({ page }) => {
+  const store = await setupMockApi(page, { auth: true, pageSize: 2 });
+  await page.goto('/');
+  await expect(page.locator(S.editor)).toBeVisible();
+  await signIn(page);
+  for (const text of ['one', 'two', 'three']) {
+    await savePaste(page, text);
+    await runCommand(page, 'New paste');
+  }
+  expect(store.auth.owned.size).toBe(3);
+  await runCommand(page, 'My pastes');
+  const rows = page.locator(`${S.paletteRow} > span`);
+  await expect(rows).toHaveText(['three', 'two', 'Load more']);
+  await page.keyboard.press('End');
+  await rows.last().click();
+  await expect(rows).toHaveText(['three', 'two', 'one']);
+  await expect(page.locator('#island .island-crumb')).toHaveText('My pastes');
 });
 
 test.describe('Private pastes and My pastes', () => {
@@ -146,6 +192,17 @@ test.describe('Private pastes and My pastes', () => {
     await openPalette(page);
     await page.locator(S.paletteInput).fill('Delete');
     await expect(paletteLabel(page, 'Delete paste')).toHaveCount(0);
+  });
+
+  test('signing out takes a private paste off the screen', async ({ page }) => {
+    await page.locator(S.editor).fill('private plan');
+    await runCommand(page, 'Make private');
+    await page.locator(S.saveBtn).click();
+    await expect(page.locator(S.viewer)).toContainText('private plan');
+    await runCommand(page, 'Sign out');
+    await expect(page.locator(S.editor)).toBeVisible();
+    await expect(page.locator(S.editor)).toHaveValue('');
+    await expect(page.locator('body')).not.toContainText('private plan');
   });
 
   test('signed out, an own private paste is a 404 that stays in Recent', async ({ page }) => {

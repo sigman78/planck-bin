@@ -109,7 +109,9 @@ describe('sign-in flow', () => {
     const sent = idp.lastTokenRequest!;
     expect(sent.get('grant_type')).toBe('authorization_code');
     expect(sent.get('code')).toBe('the-code');
-    expect(sent.get('client_secret')).toBe(CLIENT_SECRET);
+    // No methods in discovery: client_secret_basic, the spec default.
+    expect(sent.get('client_secret')).toBeNull();
+    expect(idp.lastTokenAuth).toBe(`Basic ${btoa(`${CLIENT_ID}:${CLIENT_SECRET}`)}`);
     expect(await pkceChallenge(sent.get('code_verifier')!)).toBe(params.get('code_challenge'));
 
     expect(await me(request)).toEqual({ enabled: true, user: { name: 'Ada Lovelace' } });
@@ -257,6 +259,22 @@ describe('sign-in failures', () => {
   });
 });
 
+describe('token endpoint client authentication', () => {
+  it('posts the secret in the body when the provider lists only client_secret_post', async () => {
+    idp.authMethods = ['client_secret_post'];
+    const { request } = setup();
+    expect((await signIn(request, idp)).status).toBe(303);
+    expect(idp.lastTokenRequest!.get('client_secret')).toBe(CLIENT_SECRET);
+    expect(idp.lastTokenAuth).toBeNull();
+  });
+
+  it('prefers Basic when both are listed', async () => {
+    idp.authMethods = ['client_secret_post', 'client_secret_basic'];
+    expect((await signIn(setup().request, idp)).status).toBe(303);
+    expect(idp.lastTokenAuth).toMatch(/^Basic /);
+  });
+});
+
 describe('allowlist (OIDC_ALLOWED_EMAILS)', () => {
   const vars = { ...AUTH_VARS, OIDC_ALLOWED_EMAILS: 'Ada@Example.test, bob@example.test' };
 
@@ -272,6 +290,21 @@ describe('allowlist (OIDC_ALLOWED_EMAILS)', () => {
 
     idp.tokenFor = (n) => signJwt(idp.keys[0], claimsFor(n, { email_verified: false }));
     expect(failure(await signIn(setup(vars).request, idp)).flash).toBe('denied');
+  });
+
+  it('a value that names no address lets nobody in', async () => {
+    const empty = { ...AUTH_VARS, OIDC_ALLOWED_EMAILS: ' , ' };
+    expect(failure(await signIn(setup(empty).request, idp)).flash).toBe('denied');
+  });
+
+  it('a session with an unverified email does not pass a later allowlist', async () => {
+    idp.tokenFor = (n) => signJwt(idp.keys[0], claimsFor(n, { email_verified: false }));
+    const fake = fakeEnv({ vars: AUTH_VARS });
+    const request = requester(app, fake.env, fake.ctx);
+    await signIn(request, idp);
+    expect((await me(request)).user).not.toBeNull();
+    (fake.env as unknown as Record<string, string>).OIDC_ALLOWED_EMAILS = 'ada@example.test';
+    expect((await me(request)).user).toBeNull();
   });
 
   it('ends existing sessions of an email taken off the list', async () => {
