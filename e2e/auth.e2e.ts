@@ -94,7 +94,7 @@ test.describe('Private pastes and My pastes', () => {
     await page.locator(S.editor).fill('only for me');
     await runCommand(page, 'Make private');
     await expect(page.locator(S.toast)).toContainText('Next save is private');
-    await expect(page.locator('#island .island-save svg')).toHaveAttribute('data-icon', 'private');
+    await expect(page.locator('#island .island-save svg')).toHaveAttribute('data-icon', 'lock');
 
     await runCommand(page, 'Burn after reading');
     await expect(page.locator('#island .island-save svg')).toHaveAttribute('data-icon', 'burn');

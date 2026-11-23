@@ -20,8 +20,9 @@ Pastebin for Cloudflare Workers with D1 storage. API compatible with haste-serve
 - Five color themes (Solarized Dark and Light, GitHub, Atom One Dark, Monokai).
 - Paste expiry with a nightly cleanup cron, rate limits, optional storage cap.
 - Local drafts and recent paste list in the browser.
-- Optional sign-in through any OpenID Connect provider: a list of your own pastes, deleting them,
-  and private pastes only you can open.
+- Optional sign-in through any OpenID Connect provider (Google, Pocket ID and others), with an
+  optional email allowlist. Signed in, you get a list of your own pastes, can delete them, and can
+  save private pastes that only you can open.
 
 ## Background
 
@@ -198,8 +199,8 @@ It also switches the highlighting language and lists recent pastes kept in this 
 editing, **Expires** picks the lifetime of new pastes (remembered in this browser) and **Burn
 after reading** makes the next save a one-time paste (picked again, it reads **Don't burn after
 reading** and turns it off). Non-default choices show as an icon on
-the Save chip: a clock for a lifetime, a flame for burn (the flame wins when both are set); the
-details are in its tooltip. Burn pastes are not added to the recent list.
+the Save chip: a clock for a lifetime, a flame for burn, a lock for a passphrase or a private
+paste. Only one icon shows: lock first, then flame, then clock. The tooltip lists every choice. Burn pastes are not added to the recent list.
 
 **Theme** switches the colors of the whole page: Solarized Dark (default), Solarized Light,
 GitHub, Atom One Dark or Monokai. Arrow keys preview a theme, Enter keeps it, Escape goes back.
@@ -244,10 +245,12 @@ this and was tried, but is left out for now.
 With sign-in configured, **Sign in** goes to the provider and comes back to the same page (unsaved
 text is kept as a draft). Signed in, the palette adds:
 
-- **My pastes**: your pastes on this server, from any browser. Enter opens one.
+- **My pastes**: your pastes on this server, from any browser, newest first. Private and
+  protected pastes are marked with a lock, burn pastes with a flame. Enter opens one.
 - **Make private** (while editing): the next save is private. It works like burn after reading:
-  an eye icon on the Save chip, and running it again (**Don't make private**) turns it off. Burn
-  and private turn each other off. Private pastes appear in the recent list as "Private paste".
+  the Save chip shows a lock (the same icon as for a passphrase; the tooltip tells them apart),
+  and running it again (**Don't make private**) turns it off. Burn and private turn each other
+  off. Private pastes appear in the recent list as "Private paste", without their text.
 - **Delete paste** (on your own paste): asks, then deletes it from the server.
 - **Sign out**, with your name as its hint.
 

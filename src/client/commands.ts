@@ -39,7 +39,7 @@ export interface PaletteItem {
   /** Key combination that runs the item, drawn as key caps in place of the hint text. */
   shortcut?: Shortcut;
   /** Monochrome state icon shown in place of the hint (see saveIcon). */
-  icon?: 'clock' | 'burn' | 'lock' | 'private';
+  icon?: 'clock' | 'burn' | 'lock';
   keywords?: string[];
   /** The menu opens with this item selected (the value in effect). */
   current?: boolean;
@@ -162,7 +162,8 @@ const COMMANDS: CommandDef[] = [
     // Like burn, a toggle that names the action it will perform.
     label: (ctx) => (ctx.privateNext ? "Don't make private" : 'Make private'),
     keywords: ['private', 'personal', 'only me', 'hidden', 'owner', 'secret'],
-    icon: (ctx) => (ctx.privateNext ? 'private' : undefined),
+    // Shares the passphrase lock: a finer glyph does not read at chip size.
+    icon: (ctx) => (ctx.privateNext ? 'lock' : undefined),
     available: (ctx) => editing(ctx) && signedIn(ctx),
   },
   {

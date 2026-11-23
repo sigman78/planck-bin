@@ -40,7 +40,7 @@ describe('availableCommands', () => {
     expect(find({})).toMatchObject({ label: 'Make private', icon: undefined });
     expect(find({ privateNext: true })).toMatchObject({
       label: "Don't make private",
-      icon: 'private',
+      icon: 'lock',
     });
   });
 

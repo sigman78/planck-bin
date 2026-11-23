@@ -884,12 +884,12 @@ export class AppController {
     if (this.burnNext) spoken += ', burn after reading';
     if (this.privateNext) spoken += ', private';
     if (this.lockNext) spoken += ', protected with a passphrase';
-    const icon = this.lockNext
-      ? 'lock'
-      : this.burnNext
-        ? 'burn'
-        : this.privateNext
-          ? 'private'
+    // Private shares the lock icon; the tooltip tells the two apart.
+    const icon =
+      this.lockNext || this.privateNext
+        ? 'lock'
+        : this.burnNext
+          ? 'burn'
           : this.lifetime
             ? 'clock'
             : null;
@@ -1123,7 +1123,7 @@ export class AppController {
       id: p.key,
       label,
       hint: p.private ? `private ${p.key}` : p.key,
-      icon: p.private ? 'private' : p.locked ? 'lock' : p.burn ? 'burn' : undefined,
+      icon: p.private || p.locked ? 'lock' : p.burn ? 'burn' : undefined,
       keywords: [p.key, ...(p.private ? ['private'] : [])],
     };
   }
