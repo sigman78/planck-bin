@@ -56,7 +56,7 @@
     padding: 11px 20px;
     border-radius: 9px;
     background: var(--color-toast-bg);
-    color: var(--color-text-bright);
+    color: var(--color-toast-text);
     box-shadow:
         0 0 0 1px var(--color-toast-edge),
         0 8px 24px var(--color-shadow);
@@ -80,6 +80,7 @@
 
 #toast.error {
     background: var(--color-toast-error-bg);
+    color: var(--color-toast-error-text);
     box-shadow:
         0 0 0 1px var(--color-toast-error-edge),
         0 8px 24px var(--color-shadow);

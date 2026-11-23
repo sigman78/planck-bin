@@ -166,7 +166,7 @@
 
 .island-hint .island-save {
     background: var(--color-accent);
-    color: var(--color-text-bright);
+    color: var(--color-on-accent);
     font-weight: bold;
     font-size: 11px;
     white-space: nowrap;
@@ -453,7 +453,7 @@
 
 .island-prompt-confirm {
     background: var(--color-accent);
-    color: var(--color-text-bright);
+    color: var(--color-on-accent);
     font-weight: bold !important;
 }
 
