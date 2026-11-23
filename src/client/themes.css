@@ -1,7 +1,8 @@
 /*
  * Themes: overrides of the tokens.css contract, one block per
- * html[data-theme="..."]. No attribute is Solarized Dark (tokens.css :root).
- * Ids match THEMES in themes.ts.
+ * [data-theme="..."] on <html> or on a .theme-scope element (the palette).
+ * No attribute is Solarized Dark (tokens.css :root). Ids match THEMES in
+ * themes.ts.
  *
  * Each block sets color-scheme and --overlay-l, its surfaces, content colors,
  * syntax sources and tiers. Syntax roles keep the tokens.css formulas: hue
@@ -22,7 +23,8 @@
 }
 
 /* --- Solarized Light: Ethan Schoonover ---------------------------------- */
-html[data-theme="solarized-light"] {
+html[data-theme="solarized-light"],
+.theme-scope[data-theme="solarized-light"] {
     color-scheme: light;
     --overlay-l: 0;
 
@@ -50,22 +52,38 @@ html[data-theme="solarized-light"] {
     --color-md-pre-bg:       var(--light-4);
 
     --syntax-src-text:        var(--sol-base01);
-    /* green keywords, as in Solarized's own light highlight.js style: yellow
-       turns olive at the lightness small text needs on base3 */
+    /* Hues as in the official Solarized syntax groups: Statement green,
+       Type yellow, Identifier blue, Constant cyan, PreProc orange.
+       Accents sit near 5.5:1, below the 7:1 of the dark themes: at that
+       contrast on base3 these hues only come out olive and murky.
+       Solarized's own accents are 3-4:1 here; text stays near 7. */
     --syntax-src-keyword:     var(--sol-green);
 
-    --syntax-l-bright:   0.44;
-    --syntax-l-accent:   0.455;
+    --syntax-l-bright:   0.49;
+    --syntax-l-accent:   0.50;
     --syntax-l-warm:     0.51;
     --syntax-l-text:     0.45;
     --syntax-l-dim:      0.63;
     --syntax-l-addition: 0.47;
-    --syntax-c-calm:     0.078;
-    --syntax-c-vivid:    0.105;
+    --syntax-c-calm:     0.086; /* ceiling set by cyan, the constant */
+    --syntax-c-vivid:    0.15;
+
+    /* On base3 the sRGB ceiling at this lightness differs a lot per hue, so
+       the calm roles other than cyan take their own (near-ceiling) chroma. */
+    --syntax-keyword:     oklch(from var(--sol-green)  var(--syntax-l-accent) 0.118 h);
+    --syntax-type:        oklch(from var(--sol-yellow) var(--syntax-l-accent) 0.103 h);
+    --syntax-definition:  oklch(from var(--sol-blue)   var(--syntax-l-accent) 0.127 h);
+    --syntax-addition:    oklch(from var(--sol-green)  var(--syntax-l-addition) 0.108 h);
+
+    /* comments: secondary text on the background-highlight tone (base2),
+       the Solarized way, instead of the inverted dark plate */
+    --syntax-comment:     oklch(from var(--sol-base01) 0.50 c h);
+    --syntax-comment-bg:  var(--sol-base2);
 }
 
 /* --- GitHub: GitHub Primer colors ---------------------------------------- */
-html[data-theme="github"] {
+html[data-theme="github"],
+.theme-scope[data-theme="github"] {
     color-scheme: light;
     --overlay-l: 0;
 
@@ -125,7 +143,8 @@ html[data-theme="github"] {
 }
 
 /* --- Atom One Dark: GitHub Atom team ------------------------------------- */
-html[data-theme="atom-one-dark"] {
+html[data-theme="atom-one-dark"],
+.theme-scope[data-theme="atom-one-dark"] {
     --one-bg:     oklch(0.2925 0.0157 264.30); /* #282c34 */
     --one-fg:     oklch(0.7621 0.0202 262.99); /* #abb2bf */
     --one-muted:  oklch(0.4983 0.0225 262.91); /* #5c6370 */
@@ -176,7 +195,8 @@ html[data-theme="atom-one-dark"] {
 }
 
 /* --- Monokai: Wimer Hazenberg -------------------------------------------- */
-html[data-theme="monokai"] {
+html[data-theme="monokai"],
+.theme-scope[data-theme="monokai"] {
     --mk-bg:     oklch(0.2737 0.0109 114.80); /* #272822 */
     --mk-fg:     oklch(0.9775 0.0079 106.55); /* #f8f8f2 */
     --mk-muted:  oklch(0.5467 0.0288  97.39); /* #75715e */

@@ -13,8 +13,10 @@
  * Themes: themes.css overrides these per html[data-theme="..."]; no
  * attribute is Solarized Dark. A theme sets its surfaces, content colors,
  * syntax sources (--syntax-src-*, whose hue the syntax roles take) and the
- * lightness/chroma tiers. Derived tokens recompute on <html> itself, so the
- * attribute must sit there, not on a descendant.
+ * lightness/chroma tiers. Derived tokens recompute where they are declared,
+ * so the attribute sits on <html>, or on a .theme-scope element: that one
+ * re-declares every token and so can show another theme than the page (the
+ * palette keeps the confirmed theme while the page previews one).
  *
  * Load first. The ::highlight() rules compiled from solarized-dark-hljs.css
  * keep var() references, which resolve against the highlighted element, so
@@ -22,7 +24,8 @@
  * Print styles keep literal greys: paper is theme-independent.
  */
 
-:root {
+:root,
+.theme-scope {
     color-scheme: dark;
 
     /* --- primitives: Solarized ------------------------------------------- */
@@ -152,6 +155,8 @@
     --syntax-keyword:     oklch(from var(--syntax-src-keyword) var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.5 */
     --syntax-definition:  oklch(from var(--syntax-src-definition) var(--syntax-l-accent) var(--syntax-c-calm) h); /* 7.6 */
     --syntax-constant:    oklch(from var(--syntax-src-constant) var(--syntax-l-bright) var(--syntax-c-calm) h); /* 9.6 */
+    /* types and built-ins: keyword unless a theme gives them their own hue */
+    --syntax-type:        var(--syntax-keyword);
 
     /* vivid accents; additions lifted a step so new lines stand out */
     --syntax-special:     oklch(from var(--syntax-src-special) var(--syntax-l-warm) var(--syntax-c-vivid) h); /* 5.5 */

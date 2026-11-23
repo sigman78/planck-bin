@@ -12,7 +12,8 @@ import { DEFAULT_THEME, THEMES } from '../themes';
 declare const require: (id: string) => { readFileSync(path: string, enc: string): string };
 declare const __dirname: string;
 
-const read = (name: string) => require('node:fs').readFileSync(`${__dirname}/../${name}`, 'utf8');
+const read = (name: string): string =>
+  require('node:fs').readFileSync(`${__dirname}/../${name}`, 'utf8').replace(/\r\n/g, '\n');
 const themesCss = read('themes.css');
 const blocks = parseTokenBlocks(read('tokens.css') + themesCss);
 
@@ -47,10 +48,19 @@ const SYNTAX_MIN: Record<string, number> = {
   text: 6.5,
   keyword: 6.5,
   definition: 6.5,
+  type: 6.5,
   constant: 6.5,
   special: 5,
   deletion: 5,
   addition: 6,
+};
+
+/**
+ * Per-theme exceptions. Solarized Light accents trade contrast for hue: at
+ * 6.5:1 on base3 its yellow-green and yellow turn olive (see themes.css).
+ */
+const SYNTAX_MIN_BY_THEME: Record<string, Partial<Record<string, number>>> = {
+  'solarized-light': { keyword: 5, type: 5, definition: 5, constant: 5 },
 };
 
 /** UI text on its surface: [fg, bg, minimum]. */
@@ -76,6 +86,16 @@ describe('theme registry and themes.css', () => {
     );
   });
 
+  it.each(THEMES.filter((t) => t.id !== DEFAULT_THEME))(
+    '$id applies to <html> and to a .theme-scope',
+    (theme) => {
+      expect(themesCss).toContain(
+        `html[data-theme="${theme.id}"],
+.theme-scope[data-theme="${theme.id}"] {`
+      );
+    }
+  );
+
   it.each(THEMES.filter((t) => t.id !== DEFAULT_THEME))('$id sets the full contract', (theme) => {
     const decls = blocks.get(theme.id)!;
     expect(CONTRACT.filter((name) => !decls.has(name))).toEqual([]);
@@ -84,7 +104,8 @@ describe('theme registry and themes.css', () => {
   it.each(THEMES.filter((t) => t.id !== DEFAULT_THEME))(
     '$id declares its color-scheme and overlay direction',
     (theme) => {
-      const at = themesCss.indexOf(`html[data-theme="${theme.id}"] {`);
+      const at = themesCss.indexOf(`.theme-scope[data-theme="${theme.id}"] {`);
+      expect(at).toBeGreaterThan(-1);
       const block = themesCss.slice(at, themesCss.indexOf('}', at));
       if (theme.scheme === 'light') {
         expect(block).toMatch(/color-scheme: light;/);
@@ -108,7 +129,9 @@ describe.each(THEMES)('$label colors', (theme) => {
       hex: toHex(fg),
       inSrgb: true,
     });
-    expect(contrast(fg, bg)).toBeGreaterThanOrEqual(SYNTAX_MIN[role]);
+    expect(contrast(fg, bg)).toBeGreaterThanOrEqual(
+      SYNTAX_MIN_BY_THEME[theme.id]?.[role] ?? SYNTAX_MIN[role]
+    );
   });
 
   it('dims punctuation on purpose, and comments read on their plate', () => {

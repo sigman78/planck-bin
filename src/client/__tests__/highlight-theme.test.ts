@@ -66,6 +66,8 @@ describe('HighlightTheme with the bundled Solarized theme', () => {
     // .hljs-meta .hljs-keyword beats .hljs-keyword (so "#" and "include" merge)
     expect(p('#include ')).toBe('color: var(--syntax-special);');
     expect(p('<stdio.h>')).toBe('color: var(--syntax-constant);');
+    // Types and built-ins have their own role (the keyword color by default).
+    expect(p('int')).toBe('color: var(--syntax-type);');
   });
 
   it('does not match .diff (no such element), like the span renderer', () => {
