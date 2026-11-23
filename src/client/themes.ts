@@ -28,7 +28,10 @@ export function themeLabel(id: string): string {
   return THEMES.find((t) => t.id === id)?.label ?? id;
 }
 
-/** Paint the page in a theme: set or clear data-theme on <html>. */
+/**
+ * Paint in a theme: set or clear data-theme on <html> (the page), or on a
+ * .theme-scope element, which then keeps its own theme whatever the page shows.
+ */
 export function applyTheme(id: string, root: HTMLElement = document.documentElement): void {
   if (id === DEFAULT_THEME) delete root.dataset.theme;
   else root.dataset.theme = id;

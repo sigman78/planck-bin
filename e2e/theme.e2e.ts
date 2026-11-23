@@ -12,6 +12,10 @@ async function start(page: Page): Promise<void> {
 const theme = (page: Page) =>
   page.evaluate(() => document.documentElement.getAttribute('data-theme'));
 
+/** Theme of the palette, a .theme-scope that only follows confirmed picks. */
+const paletteTheme = (page: Page) =>
+  page.evaluate(() => document.getElementById('island')!.getAttribute('data-theme'));
+
 /**
  * Background colors as sRGB bytes. Computed colors keep their oklch() form,
  * so each is painted to a canvas pixel and read back.
@@ -67,6 +71,7 @@ test.describe('Themes', () => {
     await page.keyboard.press('Enter');
 
     await expect.poll(() => theme(page)).toBe('github');
+    expect(await paletteTheme(page)).toBe('github');
     expect(await bodyBackground(page)).toBe('rgb(255, 255, 255)');
     expect(await roleColor(page, 'keyword')).not.toBe(keywordBefore);
     expect(await page.evaluate(() => localStorage.getItem('haste-theme'))).toBe('github');
@@ -74,6 +79,7 @@ test.describe('Themes', () => {
     await page.reload();
     await expect(page.locator(S.editor)).toBeVisible();
     expect(await theme(page)).toBe('github');
+    expect(await paletteTheme(page)).toBe('github');
     // The inline frame background on <html> follows the theme too.
     expect(await backgrounds(page, ['html'])).toEqual(['rgb(255, 255, 255)']);
 
@@ -88,12 +94,16 @@ test.describe('Themes', () => {
   test('arrow keys preview a theme; Escape restores the current one', async ({ page }) => {
     await start(page);
     await openThemeMenu(page);
+    const panelBefore = await backgrounds(page, ['#island .island-panel']);
 
     await page.keyboard.press('ArrowDown');
     await expect(page.locator(`${S.paletteSelected} > span`)).toHaveText('Solarized Light');
     expect(await theme(page)).toBe('solarized-light');
     await page.keyboard.press('ArrowDown');
     expect(await theme(page)).toBe('github');
+    // The palette stays in the confirmed theme while the page previews.
+    expect(await paletteTheme(page)).toBeNull();
+    expect(await backgrounds(page, ['#island .island-panel'])).toEqual(panelBefore);
 
     await page.keyboard.press('Escape');
     await expect(page.locator(S.island)).not.toHaveClass(/open/);

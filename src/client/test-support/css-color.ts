@@ -14,19 +14,23 @@ export interface Oklch {
 
 export type Declarations = Map<string, string>;
 
-/** Custom properties per block: '' for :root, the theme id for html[data-theme="id"]. */
+/** Custom properties per block: '' for :root, the theme id for [data-theme="id"] blocks. */
 export function parseTokenBlocks(css: string): Map<string, Declarations> {
   const blocks = new Map<string, Declarations>();
   const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const blockRe = /([^{}]+)\{([^{}]*)\}/g;
   for (const m of text.matchAll(blockRe)) {
-    const selector = m[1].trim();
-    let id: string | null = null;
-    if (selector === ':root') id = '';
-    else {
-      const t = /^(?::root|html)\[data-theme="([\w-]+)"\]$/.exec(selector);
-      if (t) id = t[1];
-    }
+    // A selector list maps to one block: :root / .theme-scope (default) or a
+    // [data-theme="id"] form; the parts must agree.
+    const ids = new Set<string | null>(
+      m[1].split(',').map((sel) => {
+        const s = sel.trim();
+        if (s === ':root' || s === '.theme-scope') return '';
+        return /^(?::root|html|\.theme-scope)\[data-theme="([\w-]+)"\]$/.exec(s)?.[1] ?? null;
+      })
+    );
+    if (ids.size !== 1) throw new Error(`mixed theme selector list: ${m[1].trim()}`);
+    const id = [...ids][0];
     if (id === null) continue;
     const decls = blocks.get(id) ?? new Map<string, string>();
     for (const d of m[2].split(';')) {

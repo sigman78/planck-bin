@@ -130,7 +130,7 @@ export class AppController {
   constructor(options: AppConfig) {
     this.scrollToTopOnSave = options.scrollToTopOnSave !== false;
     // First thing, so the page paints in the remembered theme.
-    applyTheme(this.theme);
+    this.paintTheme(this.theme);
 
     // Initialize modules
     this.document = new Paste();
@@ -970,7 +970,7 @@ export class AppController {
       if (!isThemeId(itemId)) return;
       this.theme = itemId;
       this.themes.save(itemId);
-      applyTheme(itemId);
+      this.paintTheme(itemId);
     } else if (menuId === 'recent') {
       if (itemId === CLEAR_RECENT_ID) {
         this.recent.clear();
@@ -985,7 +985,17 @@ export class AppController {
     }
   }
 
-  /** Show a theme while it is selected in the menu; null restores the current one. */
+  /** The page and the palette (a .theme-scope) in a confirmed theme. */
+  private paintTheme(id: string): void {
+    applyTheme(id);
+    const island = document.getElementById('island');
+    if (island) applyTheme(id, island);
+  }
+
+  /**
+   * Show a theme on the page while it is selected in the menu; null restores
+   * the current one. The palette keeps the current theme until a pick.
+   */
   private previewSubmenuItem(menuId: string, itemId: string | null): void {
     if (menuId !== 'theme') return;
     applyTheme(itemId !== null && isThemeId(itemId) ? itemId : this.theme);

@@ -24,7 +24,7 @@ const islandTransitions = (page: Page) =>
   page.evaluate(() => (window as unknown as { __islandTransitions: string[] }).__islandTransitions);
 
 /** The island's own fade-in on settle is expected; nothing else may animate. */
-const FADE_IN = ['no-print opacity'];
+const FADE_IN = ['no-print theme-scope opacity'];
 
 test.describe('Island on page load', () => {
   test('a known-stage visit to a paste shows the settled pill without animating', async ({
