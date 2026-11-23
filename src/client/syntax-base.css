@@ -1,7 +1,8 @@
 /*!
-  Theme: Solarized Dark
-  Author: Ethan Schoonover (modified by aramisgithub)
-  Revised per tonsky.me/blog/syntax-highlighting/
+  Syntax base: highlight.js scopes mapped to the --syntax-* roles, shared by
+  every theme. Themes change colors only, in tokens.css and themes.css.
+  Derived from the Solarized Dark hljs theme (Ethan Schoonover, modified by
+  aramisgithub), revised per tonsky.me/blog/syntax-highlighting/.
 
   Colors come from the --syntax-* roles in tokens.css (OKLCH). The rules here
   only map highlight.js scopes to roles; highlight-theme.ts copies them into

@@ -18,7 +18,7 @@
  * re-declares every token and so can show another theme than the page (the
  * palette keeps the confirmed theme while the page previews one).
  *
- * Load first. The ::highlight() rules compiled from solarized-dark-hljs.css
+ * Load first. The ::highlight() rules compiled from syntax-base.css
  * keep var() references, which resolve against the highlighted element, so
  * these must live on :root (or another ancestor of #viewer).
  * Print styles keep literal greys: paper is theme-independent.

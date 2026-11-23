@@ -47,7 +47,7 @@ function paintedAt(theme: HighlightTheme, content: string, language?: string) {
 }
 
 describe('HighlightTheme with the bundled Solarized theme', () => {
-  const css = require('node:fs').readFileSync(`${__dirname}/../solarized-dark-hljs.css`, 'utf8');
+  const css = require('node:fs').readFileSync(`${__dirname}/../syntax-base.css`, 'utf8');
 
   it('applies plain token rules', () => {
     const p = painted(compile(css), 'const x = "hi"; // note\nfunction f(a) {}', 'javascript');
