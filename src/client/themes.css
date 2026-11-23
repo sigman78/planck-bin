@@ -1,0 +1,227 @@
+/*
+ * Themes: overrides of the tokens.css contract, one block per
+ * html[data-theme="..."]. No attribute is Solarized Dark (tokens.css :root).
+ * Ids match THEMES in themes.ts.
+ *
+ * Each block sets color-scheme and --overlay-l, its surfaces, content colors,
+ * syntax sources and tiers. Syntax roles keep the tokens.css formulas: hue
+ * from the source, lightness and chroma from the tiers, so each theme is
+ * tuned on its own background to the same contrast ladder (see
+ * __tests__/theme-tokens.test.ts). Palette anchors only, not the original
+ * stylesheets; credits per block.
+ *
+ * Load right after tokens.css.
+ */
+
+/* A theme's page color beats the inline Solarized frame background on <html>.
+   Screen only: print keeps its white page. */
+@media screen {
+    html[data-theme] {
+        background: var(--color-bg) !important;
+    }
+}
+
+/* --- Solarized Light: Ethan Schoonover ---------------------------------- */
+html[data-theme="solarized-light"] {
+    color-scheme: light;
+    --overlay-l: 0;
+
+    --color-island-panel: oklch(0.9900 0.0120 90.10);
+    --color-key-bg:       var(--sol-base2);
+    --color-bg:           var(--sol-base3);
+
+    --color-editor-text: var(--sol-base01);
+    --color-placeholder: var(--sol-base1);
+    --color-icon:        var(--sol-base00);
+    --color-logo:        oklch(0.3600 0.0400 219.82);
+    --color-link:        oklch(from var(--sol-blue) 0.50 c h);
+    --color-on-accent:   oklch(1 0 0);
+    --color-focus-muted: oklch(0.8000 0.0350 205.00);
+
+    --color-toast-text:     var(--color-logo);
+    --color-toast-error-bg: oklch(0.5100 0.1900 27.12);
+    --color-selection:      oklch(0.8900 0.0350  90.00);
+    --color-find:           oklch(from var(--sol-yellow) l c h / 0.30);
+    --color-shadow:         var(--shade-18);
+
+    --color-island-bg:       oklch(0.9306 0.0260 92.40 / 0.96);
+    --color-island-bg-hover: oklch(0.9050 0.0280 92.40 / 0.98);
+    --color-island-shadow:   var(--shade-18);
+    --color-md-pre-bg:       var(--light-4);
+
+    --syntax-src-text:        var(--sol-base01);
+    /* green keywords, as in Solarized's own light highlight.js style: yellow
+       turns olive at the lightness small text needs on base3 */
+    --syntax-src-keyword:     var(--sol-green);
+
+    --syntax-l-bright:   0.44;
+    --syntax-l-accent:   0.455;
+    --syntax-l-warm:     0.51;
+    --syntax-l-text:     0.45;
+    --syntax-l-dim:      0.63;
+    --syntax-l-addition: 0.47;
+    --syntax-c-calm:     0.078;
+    --syntax-c-vivid:    0.105;
+}
+
+/* --- GitHub: GitHub Primer colors ---------------------------------------- */
+html[data-theme="github"] {
+    color-scheme: light;
+    --overlay-l: 0;
+
+    --gh-fg:      oklch(0.2781 0.0117 248.25); /* #24292e */
+    --gh-heading: oklch(0.2542 0.0111 254.04); /* #1f2328 */
+    --gh-muted:   oklch(0.5514 0.0190 250.98); /* #6a737d */
+    --gh-red:     oklch(0.5879 0.1927  20.47); /* #d73a49 */
+    --gh-purple:  oklch(0.5015 0.1883 294.99); /* #6f42c1 */
+    --gh-blue:    oklch(0.4949 0.1801 257.60); /* #005cc5 */
+    --gh-orange:  oklch(0.6482 0.1800  45.87); /* #e36209 */
+    --gh-crimson: oklch(0.4959 0.1832  24.19); /* #b31d28 */
+    --gh-green:   oklch(0.5464 0.1442 147.32); /* #22863a */
+    --gh-accent:  oklch(0.5399 0.1906 257.48); /* #0969da */
+
+    --color-island-panel: oklch(1 0 0);
+    --color-key-bg:       oklch(0.9782 0.0034 247.86); /* #f6f8fa */
+    --color-bg:           oklch(1 0 0);
+
+    --color-editor-text: var(--gh-fg);
+    --color-placeholder: var(--gh-muted);
+    --color-icon:        oklch(0.4849 0.0196 251.02); /* #57606a */
+    --color-accent:      var(--gh-accent);
+    --color-logo:        var(--gh-heading);
+    --color-link:        var(--gh-accent);
+    --color-preview-on:  oklch(0.5517 0.1450 148.22); /* #1f883d */
+    --color-on-accent:   oklch(1 0 0);
+    --color-focus-muted: oklch(0.7783 0.0163 248.04); /* #afb8c1 */
+
+    --color-toast-text:     var(--gh-heading);
+    --color-toast-error-bg: oklch(0.5517 0.2051 24.53); /* #cf222e */
+    --color-selection:      oklch(0.9117 0.0445 249.36); /* #cce5ff */
+    --color-find:           oklch(0.9099 0.1235 95.67 / 0.70); /* #fae17d */
+    --color-shadow:         var(--shade-18);
+
+    --color-island-bg:       oklch(0.9782 0.0034 247.86 / 0.96); /* #f6f8fa */
+    --color-island-bg-hover: oklch(0.9472 0.0069 247.90 / 0.98); /* #eaeef2 */
+    --color-island-shadow:   var(--shade-18);
+    --color-md-pre-bg:       oklch(0.9782 0.0034 247.86); /* #f6f8fa */
+
+    --syntax-src-text:        var(--gh-fg);
+    --syntax-src-punctuation: var(--gh-muted);
+    --syntax-src-keyword:     var(--gh-red);
+    --syntax-src-definition:  var(--gh-purple);
+    --syntax-src-constant:    var(--gh-blue);
+    --syntax-src-special:     var(--gh-orange);
+    --syntax-src-deletion:    var(--gh-crimson);
+    --syntax-src-addition:    var(--gh-green);
+
+    --syntax-l-bright:   0.4;
+    --syntax-l-accent:   0.455;
+    --syntax-l-warm:     0.52;
+    --syntax-l-text:     0.46;
+    --syntax-l-dim:      0.645;
+    --syntax-l-addition: 0.44;
+    --syntax-c-calm:     0.15;
+    --syntax-c-vivid:    0.12;
+}
+
+/* --- Atom One Dark: GitHub Atom team ------------------------------------- */
+html[data-theme="atom-one-dark"] {
+    --one-bg:     oklch(0.2925 0.0157 264.30); /* #282c34 */
+    --one-fg:     oklch(0.7621 0.0202 262.99); /* #abb2bf */
+    --one-muted:  oklch(0.4983 0.0225 262.91); /* #5c6370 */
+    --one-purple: oklch(0.6936 0.1635 318.21); /* #c678dd */
+    --one-blue:   oklch(0.7277 0.1209 245.60); /* #61aeee */
+    --one-green:  oklch(0.7683 0.1103 133.00); /* #98c379 */
+    --one-orange: oklch(0.7273 0.0949  63.82); /* #d19a66 */
+    --one-red:    oklch(0.6709 0.1448  17.00); /* #e06c75 */
+    --one-cyan:   oklch(0.7231 0.0916 206.31); /* #56b6c2 */
+
+    --color-island-panel: oklch(0.2630 0.0127 258.37); /* #21252b */
+    --color-key-bg:       oklch(0.2630 0.0127 258.37);
+    --color-bg:           var(--one-bg);
+
+    --color-editor-text: var(--one-fg);
+    --color-placeholder: var(--one-muted);
+    --color-icon:        oklch(0.8878 0.0088 264.52); /* #d7dae0 */
+    --color-accent:      oklch(0.5600 0.1700 262.74); /* #528bff, darkened for white chip text */
+    --color-logo:        oklch(0.9300 0.0080 264.52);
+    --color-link:        var(--one-blue);
+    --color-preview-on:  var(--one-cyan);
+    --color-focus-muted: oklch(0.4390 0.0295 267.55); /* #4b5263 */
+
+    --color-toast-error-bg: oklch(0.5000 0.1500 22.00);
+    --color-selection:      oklch(0.3863 0.0235 265.69); /* #3e4451 */
+    --color-find:           oklch(0.8259 0.0974 81.63 / 0.35); /* #e6c07b */
+
+    --color-island-bg:       oklch(0.3121 0.0176 262.24 / 0.96); /* #2c313a */
+    --color-island-bg-hover: oklch(0.3400 0.0189 264.28 / 0.98); /* #333842 */
+
+    --syntax-src-text:        var(--one-fg);
+    --syntax-src-punctuation: var(--one-muted);
+    --syntax-src-keyword:     var(--one-purple);
+    --syntax-src-definition:  var(--one-blue);
+    --syntax-src-constant:    var(--one-green);
+    --syntax-src-special:     var(--one-orange);
+    --syntax-src-deletion:    var(--one-red);
+    --syntax-src-addition:    var(--one-green);
+
+    --syntax-l-bright:   0.86;
+    --syntax-l-accent:   0.8;
+    --syntax-l-warm:     0.72;
+    --syntax-l-text:     0.78;
+    --syntax-l-dim:      0.582;
+    --syntax-l-addition: 0.82;
+    --syntax-c-calm:     0.1;
+    --syntax-c-vivid:    0.16;
+}
+
+/* --- Monokai: Wimer Hazenberg -------------------------------------------- */
+html[data-theme="monokai"] {
+    --mk-bg:     oklch(0.2737 0.0109 114.80); /* #272822 */
+    --mk-fg:     oklch(0.9775 0.0079 106.55); /* #f8f8f2 */
+    --mk-muted:  oklch(0.5467 0.0288  97.39); /* #75715e */
+    --mk-pink:   oklch(0.6416 0.2400   7.47); /* #f92672 */
+    --mk-green:  oklch(0.8414 0.2044 127.29); /* #a6e22e */
+    --mk-yellow: oklch(0.8792 0.1255 103.18); /* #e6db74 */
+    --mk-orange: oklch(0.7668 0.1683  62.37); /* #fd971f */
+    --mk-purple: oklch(0.7012 0.1812 298.06); /* #ae81ff */
+    --mk-cyan:   oklch(0.8269 0.1080 211.96); /* #66d9ef */
+
+    --color-island-panel: oklch(0.2371 0.0058 121.89); /* #1e1f1c */
+    --color-key-bg:       oklch(0.2371 0.0058 121.89);
+    --color-bg:           var(--mk-bg);
+
+    --color-editor-text: oklch(from var(--mk-fg) 0.84 c h);
+    --color-placeholder: var(--mk-muted);
+    --color-icon:        oklch(from var(--mk-fg) 0.88 c h);
+    --color-accent:      oklch(0.5900 0.2200 7.47); /* #f92672, darkened for white chip text */
+    --color-logo:        var(--mk-fg);
+    --color-link:        var(--mk-cyan);
+    --color-preview-on:  var(--mk-cyan);
+    --color-focus-muted: oklch(0.4500 0.0250 103.00);
+
+    --color-toast-error-bg: oklch(0.5000 0.1800 15.00);
+    --color-selection:      oklch(0.3994 0.0163 102.42); /* #49483e */
+    --color-find:           oklch(from var(--mk-yellow) l c h / 0.35);
+
+    --color-island-bg:       oklch(0.3574 0.0184 103.00 / 0.96); /* #3e3d32 */
+    --color-island-bg-hover: oklch(0.3994 0.0163 102.42 / 0.98); /* #49483e */
+
+    --syntax-src-text:        var(--mk-fg);
+    --syntax-src-punctuation: var(--mk-muted);
+    --syntax-src-keyword:     var(--mk-pink);
+    --syntax-src-definition:  var(--mk-green);
+    --syntax-src-constant:    var(--mk-yellow);
+    --syntax-src-special:     var(--mk-orange);
+    --syntax-src-deletion:    var(--mk-pink);
+    --syntax-src-addition:    var(--mk-green);
+
+    --syntax-l-bright:   0.855;
+    --syntax-l-accent:   0.79;
+    --syntax-l-warm:     0.705;
+    --syntax-l-text:     0.765;
+    --syntax-l-dim:      0.567;
+    --syntax-l-addition: 0.815;
+    --syntax-c-calm:     0.125;
+    --syntax-c-vivid:    0.16;
+}
