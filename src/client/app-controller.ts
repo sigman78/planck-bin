@@ -30,6 +30,8 @@ import {
   normalizePassphrase,
 } from './lock-crypto';
 import { LifetimeStore } from './lifetime-store';
+import { ThemeStore } from './theme-store';
+import { DEFAULT_THEME, THEMES, applyTheme, isThemeId, themeLabel } from './themes';
 import { LIFETIMES, LIFETIME_LABELS, isLifetimeId, type LifetimeId } from '../shared/types';
 import { PREVIEW_BY_DEFAULT } from '../shared/preview';
 import type { PaletteItem } from './commands';
@@ -93,6 +95,9 @@ export class AppController {
   private lifetimes = new LifetimeStore();
   /** Lifetime for new pastes; null = server default. Remembered per browser. */
   private lifetime: LifetimeId | null = this.lifetimes.load();
+  private themes = new ThemeStore();
+  /** Color theme on screen; remembered per browser. */
+  private theme: string = this.themes.load() ?? DEFAULT_THEME;
   /** The next save is burn-after-reading; resets after each save. */
   private burnNext = false;
   /** The unread burn paste behind the reveal gate. */
@@ -124,6 +129,8 @@ export class AppController {
 
   constructor(options: AppConfig) {
     this.scrollToTopOnSave = options.scrollToTopOnSave !== false;
+    // First thing, so the page paints in the remembered theme.
+    applyTheme(this.theme);
 
     // Initialize modules
     this.document = new Paste();
@@ -150,6 +157,7 @@ export class AppController {
         burn: this.document.burn,
         burnNext: this.burnNext,
         lifetimeLabel: this.lifetime ? LIFETIME_LABELS[this.lifetime] : 'default',
+        themeLabel: themeLabel(this.theme),
         lock: this.document.locked ? (this.pendingLock ? 'pending' : 'open') : undefined,
         lockNext: this.lockNext !== null,
         hasPassphrase: this.document.key !== undefined && this.passphrases.has(this.document.key),
@@ -158,6 +166,7 @@ export class AppController {
       run: (id) => this.runCommand(id),
       submenu: (id) => this.submenuItems(id),
       runSubmenu: (menuId, itemId) => this.runSubmenuItem(menuId, itemId),
+      previewSubmenu: (menuId, itemId) => this.previewSubmenuItem(menuId, itemId),
       // Both work on the source text: leave the preview first.
       goToLine: (line) => {
         this.leavePreview();
@@ -923,6 +932,15 @@ export class AppController {
         hint: id === current ? 'current' : undefined,
       }));
     }
+    if (menuId === 'theme') {
+      return THEMES.map((t) => ({
+        id: t.id,
+        label: t.label,
+        hint: t.id === this.theme ? 'current' : t.scheme,
+        keywords: [t.scheme],
+        current: t.id === this.theme,
+      }));
+    }
     if (menuId === 'recent') {
       const entries = this.recent.list();
       const items: PaletteItem[] = entries.map((entry) => ({
@@ -948,6 +966,11 @@ export class AppController {
       const label = this.lifetime ? LIFETIME_LABELS[this.lifetime] : 'server default';
       this.notify.toast(`New pastes expire: ${label}`, 'info', { brief: true });
       this.syncChrome();
+    } else if (menuId === 'theme') {
+      if (!isThemeId(itemId)) return;
+      this.theme = itemId;
+      this.themes.save(itemId);
+      applyTheme(itemId);
     } else if (menuId === 'recent') {
       if (itemId === CLEAR_RECENT_ID) {
         this.recent.clear();
@@ -960,6 +983,12 @@ export class AppController {
         this.openPath(entry.path);
       }
     }
+  }
+
+  /** Show a theme while it is selected in the menu; null restores the current one. */
+  private previewSubmenuItem(menuId: string, itemId: string | null): void {
+    if (menuId !== 'theme') return;
+    applyTheme(itemId !== null && isThemeId(itemId) ? itemId : this.theme);
   }
 
   /** Re-highlight the presented paste with another language ('' = plain). */
