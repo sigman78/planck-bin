@@ -3,59 +3,26 @@
   Author: Ethan Schoonover (modified by aramisgithub)
   Revised per tonsky.me/blog/syntax-highlighting/
 
-  Principles applied:
-    1. Keywords, types, variables, built-ins → base text. Too common to highlight.
-    2. Definitions (function/class names at declaration) → blue. Structural landmarks.
-    3. Constants (strings, numbers, literals, regexp) → cyan. Logic paths start here.
-    4. Comments → bright yellow, no italic. If someone wrote it, read it.
-    5. Punctuation & operators → dimmed. Names matter more than brackets.
-    6. No bold/italic for syntax — typography shouldn't compete with the 4 colors.
+  Colors come from the --syntax-* roles in tokens.css (OKLCH). The rules here
+  only map highlight.js scopes to roles; highlight-theme.ts copies them into
+  ::highlight() rules with the var() references intact.
 
-  Palette tweaks from original Solarized:
-    - Yellow (comments):    L 0.65 → 0.80, C 0.134 → 0.150  brightest element
-    - Cyan (constants):     L 0.64 → 0.73, C 0.102 → 0.125  clearly above base text
-    - Blue (definitions):   L 0.61 → 0.70, C 0.140 → 0.155  clearly above base text
-    - Punctuation (base01): L 0.52 → 0.47                    more clearly recedes
-    Hues are untouched. Orange/red/green unchanged.
+  Roles:
+    keyword     keywords, types, variables, built-ins, tags, attributes
+    definition  function/class names at declaration, selectors, sections
+    constant    strings, numbers, literals, regexp, symbols
+    comment     inverted: dark text on a dimmed plate
+    punctuation punctuation and operators, dimmed
+    special     meta, preprocessor
+  No bold/italic for syntax; markdown strong/emphasis keep theirs.
 */
-
-pre code.hljs,
-code.hljs {
-  /* --- Solarized Dark palette (OKLCH) --- */
-  --sol-base03:  oklch(0.2673 0.0486 219.84deg); /* #002b36  darkest background  */
-  --sol-base02:  oklch(0.3092 0.0518 219.68deg); /* #073642  bg highlight        */
-  --sol-base01:  oklch(0.4600 0.0240 219.20deg); /* punctuation — dimmed         */
-  --sol-base0:   oklch(0.7000 0.0160 205.00deg); /* base text — brighter reading */
-
-  --sol-yellow:  oklch(0.7500 0.1400  85.72deg); /* comments — warmest, brightest */
-  --sol-orange:  oklch(0.5808 0.1732  39.49deg); /* special / preprocessor        */
-  --sol-red:     oklch(0.5863 0.2064  27.11deg); /* deletion                      */
-  --sol-cyan:    oklch(0.7600 0.1200 187.42deg); /* constants — bright data color */
-  --sol-blue:    oklch(0.7300 0.1500 244.94deg); /* definitions — structural blue */
-  --sol-green:   oklch(0.6444 0.1508 118.61deg); /* addition                      */
-
-  /* --- Semantic roles --- */
-  --color-bg:           var(--sol-base03);
-  --color-bg-highlight: var(--sol-base02);
-  --color-selection:    oklch(0.42 0.07 219.5deg);
-  --color-text:         var(--sol-base0);
-  --color-punctuation:  var(--sol-base01);
-  --color-comment:      var(--sol-base03); /*var(--sol-yellow); */
-  --color-comment-bg:   var(--sol-base01); /*oklch(0.295 0.020 85.72deg);*/
-  --color-constant:     var(--sol-cyan);   /* strings, numbers, regexp, literals */
-  --color-definition:   var(--sol-blue);   /* function/class at declaration site */
-  --color-special:      var(--sol-orange); /* meta, preprocessor, embedded tags  */
-  --color-deletion:     var(--sol-red);
-  --color-addition:     var(--sol-green);
-  --color-diff:         var(--sol-blue);
-}
 
 pre code.hljs {
   display: block;
   overflow-x: auto;
   padding: 1em;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--syntax-bg);
+  color: var(--syntax-text);
 }
 
 code.hljs {
@@ -72,18 +39,18 @@ code.hljs {
 .hljs-params,
 .hljs-property {}
 
-/* Comments: bright, not hidden — good comments deserve attention */
+/* Comments: an inverted plate, so they read as asides */
 .hljs-comment,
 .hljs-quote,
 .hljs-doctag {
-  color: var(--color-comment);
-  background-color: var(--color-comment-bg);
+  color: var(--syntax-comment);
+  background-color: var(--syntax-comment-bg);
   border-radius: 2px;
 /*  padding: 0.05em 0.25em;
   margin: 0 -0.25em; */
 }
 
-/* Keywords, types, variables, built-ins: base text — too common to stand out */
+/* Keywords, types, variables, built-ins */
 .hljs-keyword,
 .hljs-type,
 .hljs-template-tag,
@@ -96,17 +63,17 @@ code.hljs {
 .hljs-attr,
 .hljs-attribute,
 .hljs-built_in {
-  color: var(--sol-yellow);
+  color: var(--syntax-keyword);
 }
 
-/* Punctuation & operators: dimmed — let names breathe */
+/* Punctuation & operators: dimmed, so names stand out */
 .hljs-punctuation,
 .hljs-operator,
 .hljs-bullet {
-  color: var(--color-punctuation);
+  color: var(--syntax-punctuation);
 }
 
-/* Constants: strings, numbers, literals — logic paths start here */
+/* Constants: strings, numbers, literals */
 .hljs-string,
 .hljs-number,
 .hljs-literal,
@@ -114,12 +81,12 @@ code.hljs {
 .hljs-link,
 .hljs-symbol,
 .hljs-variable.constant_ {
-  color: var(--color-constant);
+  color: var(--syntax-constant);
 }
 
 /* meta strings follow their semantic role */
 .hljs-meta .hljs-string {
-  color: var(--color-constant);
+  color: var(--syntax-constant);
 }
 
 /* Definitions: function/class names at their declaration site */
@@ -131,27 +98,27 @@ code.hljs {
 .hljs-title.function_,
 .hljs-function .hljs-title,
 .hljs-section {
-  color: var(--color-definition);
+  color: var(--syntax-definition);
 }
 
 /* Special: meta, preprocessor, embedded language tags */
 .hljs-meta,
 .hljs-meta .hljs-keyword,
 .hljs-meta-keyword {
-  color: var(--color-special);
+  color: var(--syntax-special);
 }
 
 /* Diff */
 .diff .hljs-meta {
-  color: var(--color-diff);
+  color: var(--syntax-diff);
 }
 
 .hljs-deletion {
-  color: var(--color-deletion);
+  color: var(--syntax-deletion);
 }
 
 .hljs-addition {
-  color: var(--color-addition);
+  color: var(--syntax-addition);
 }
 
 /* Markdown: preserve content-level formatting (not syntax decoration) */
