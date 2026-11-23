@@ -56,11 +56,19 @@ const SYNTAX_MIN: Record<string, number> = {
 };
 
 /**
- * Per-theme exceptions. Solarized Light accents trade contrast for hue: at
- * 6.5:1 on base3 its yellow-green and yellow turn olive (see themes.css).
+ * Per-theme exceptions. Solarized Light accents trade contrast for vibrance,
+ * down to WCAG AA: on base3, chroma only fits at higher lightness (see themes.css).
  */
 const SYNTAX_MIN_BY_THEME: Record<string, Partial<Record<string, number>>> = {
-  'solarized-light': { keyword: 5, type: 5, definition: 5, constant: 5 },
+  'solarized-light': {
+    keyword: 4.5,
+    type: 4.5,
+    definition: 4.5,
+    constant: 4.5,
+    special: 4.5,
+    deletion: 4.5,
+    addition: 4.5,
+  },
 };
 
 /** UI text on its surface: [fg, bg, minimum]. */

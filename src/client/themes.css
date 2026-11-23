@@ -54,26 +54,28 @@ html[data-theme="solarized-light"],
     --syntax-src-text:        var(--sol-base01);
     /* Hues as in the official Solarized syntax groups: Statement green,
        Type yellow, Identifier blue, Constant cyan, PreProc orange.
-       Accents sit near 5.5:1, below the 7:1 of the dark themes: at that
-       contrast on base3 these hues only come out olive and murky.
-       Solarized's own accents are 3-4:1 here; text stays near 7. */
+       Accents sit at the WCAG AA line (about 4.6:1), well below the 7:1 of
+       the dark themes: on base3 chroma only fits at higher lightness, and
+       nearer 7:1 these hues come out olive and murky. Each takes its own
+       sRGB ceiling chroma. Solarized's own accents are 3-4:1 here; text
+       stays near 7. */
     --syntax-src-keyword:     var(--sol-green);
 
-    --syntax-l-bright:   0.49;
-    --syntax-l-accent:   0.50;
-    --syntax-l-warm:     0.51;
+    --syntax-l-bright:   0.535;
+    --syntax-l-accent:   0.54;
+    --syntax-l-warm:     0.54;
     --syntax-l-text:     0.45;
     --syntax-l-dim:      0.63;
-    --syntax-l-addition: 0.47;
-    --syntax-c-calm:     0.086; /* ceiling set by cyan, the constant */
-    --syntax-c-vivid:    0.15;
+    --syntax-l-addition: 0.52;
+    --syntax-c-calm:     0.094; /* ceiling set by cyan, the constant */
+    --syntax-c-vivid:    0.172; /* ceiling set by orange */
 
     /* On base3 the sRGB ceiling at this lightness differs a lot per hue, so
        the calm roles other than cyan take their own (near-ceiling) chroma. */
-    --syntax-keyword:     oklch(from var(--sol-green)  var(--syntax-l-accent) 0.118 h);
-    --syntax-type:        oklch(from var(--sol-yellow) var(--syntax-l-accent) 0.103 h);
-    --syntax-definition:  oklch(from var(--sol-blue)   var(--syntax-l-accent) 0.127 h);
-    --syntax-addition:    oklch(from var(--sol-green)  var(--syntax-l-addition) 0.108 h);
+    --syntax-keyword:     oklch(from var(--sol-green)  var(--syntax-l-accent) 0.127 h);
+    --syntax-type:        oklch(from var(--sol-yellow) var(--syntax-l-accent) 0.111 h);
+    --syntax-definition:  oklch(from var(--sol-blue)   var(--syntax-l-accent) 0.136 h);
+    --syntax-addition:    oklch(from var(--sol-green)  var(--syntax-l-addition) 0.123 h);
 
     /* comments: secondary text on the background-highlight tone (base2),
        the Solarized way, instead of the inverted dark plate */
