@@ -74,6 +74,64 @@ export function capExpireDays(days: number, maxExpireDays: number): number {
   return days === 0 ? maxExpireDays : Math.min(days, maxExpireDays);
 }
 
+/** Sign-in settings; null when sign-in is off. */
+export interface AuthConfig {
+  /** Exact issuer URL, as in its discovery document (no trailing slash added). */
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  sessionSecret: string;
+  /**
+   * Lowercased; null = any account at the issuer may sign in (variable unset or
+   * empty). A value that names no address (", ") is an empty list: nobody.
+   */
+  allowedEmails: string[] | null;
+}
+
+const MIN_SESSION_SECRET_LENGTH = 32;
+let warnedPartialAuth = false;
+let warnedEmptyAllowlist = false;
+
+/**
+ * Sign-in is on only when the issuer, client id, client secret and session
+ * secret are all set. A partial setup stays off and logs once per isolate.
+ */
+export function getAuthConfig(env: Env): AuthConfig | null {
+  const issuer = String(env.OIDC_ISSUER ?? '').trim();
+  const clientId = String(env.OIDC_CLIENT_ID ?? '').trim();
+  const clientSecret = String(env.OIDC_CLIENT_SECRET ?? '').trim();
+  const sessionSecret = String(env.SESSION_SECRET ?? '').trim();
+  const parts = [issuer, clientId, clientSecret, sessionSecret];
+  if (parts.every((p) => p === '')) return null;
+  if (parts.some((p) => p === '') || sessionSecret.length < MIN_SESSION_SECRET_LENGTH) {
+    if (!warnedPartialAuth) {
+      warnedPartialAuth = true;
+      console.error(
+        'Sign-in is off: set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and SESSION_SECRET ' +
+          `(at least ${MIN_SESSION_SECRET_LENGTH} characters)`
+      );
+    }
+    return null;
+  }
+  const rawEmails = String(env.OIDC_ALLOWED_EMAILS ?? '');
+  const emails = rawEmails
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e !== '');
+  // Set but naming nobody is a typo, not "anyone": fail closed.
+  if (rawEmails !== '' && emails.length === 0 && !warnedEmptyAllowlist) {
+    warnedEmptyAllowlist = true;
+    console.error('OIDC_ALLOWED_EMAILS names no address: nobody can sign in');
+  }
+  return {
+    issuer,
+    clientId,
+    clientSecret,
+    sessionSecret,
+    allowedEmails: rawEmails === '' ? null : emails,
+  };
+}
+
 export function getServerConfig(env: Env): ServerConfig {
   return {
     maxPasteSize: intVar(env.MAX_PASTE_SIZE, 400000, LIMITS.maxPasteSize),

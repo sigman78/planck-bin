@@ -85,6 +85,13 @@ const MENU_TITLES: Record<string, string> = {
   recent: 'Recent',
   expiry: 'Expires',
   theme: 'Theme',
+  mine: 'My pastes',
+};
+
+/** What an empty submenu says (filtered menus say "No matches"). */
+const MENU_EMPTY: Record<string, string> = {
+  recent: 'No recent pastes',
+  mine: 'No pastes yet',
 };
 
 const COLLAPSE_FALLBACK_MS = 650;
@@ -624,6 +631,16 @@ export class CommandPalette {
     this.onInputChange();
   }
 
+  /**
+   * The host's items changed (an async list arrived, sign-in state is known):
+   * rebuild the rows in place, keeping the filter. No-op while closed.
+   */
+  refresh(): void {
+    if (!this.isOpen()) return;
+    if (this.menu !== null) this.menuItems = this.host.submenu(this.menu);
+    this.render();
+  }
+
   private setMenu(menu: string | null): void {
     this.endPreview();
     this.menu = menu;
@@ -664,8 +681,13 @@ export class CommandPalette {
       return items.map((item) => ({
         itemId: item.id,
         label: item.label,
+        disabled: item.disabled,
         hint: item.hint,
         action: () => {
+          if (item.keepOpen) {
+            this.host.runSubmenu(menuId, item.id);
+            return true;
+          }
           this.close();
           this.host.runSubmenu(menuId, item.id);
         },
@@ -762,7 +784,8 @@ export class CommandPalette {
     if (this.rows.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'island-empty';
-      empty.textContent = inMenu && this.menu === 'recent' ? 'No recent pastes' : 'No matches';
+      const unfiltered = this.input.value === '';
+      empty.textContent = (inMenu && unfiltered && MENU_EMPTY[this.menu!]) || 'No matches';
       frag.appendChild(empty);
     }
     this.rows.forEach((row, i) => {

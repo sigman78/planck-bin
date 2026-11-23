@@ -33,6 +33,8 @@ export interface SaveResponse {
   burn?: true;
   /** Protected paste: readable only through POST /documents/:id/unlock. */
   locked?: true;
+  /** Private paste: readable by its owner (the signed-in creator) only. */
+  private?: true;
 }
 
 /**
@@ -76,6 +78,10 @@ export interface GetResponse {
   expiresAt?: string | null;
   /** Burn-after-reading paste: this response was its only read, it is gone now. */
   burn?: true;
+  /** The signed-in viewer created it (and may delete it). */
+  mine?: true;
+  /** Readable by its owner only. */
+  private?: true;
 }
 
 /**
@@ -110,6 +116,42 @@ export interface LockedPending {
   salt: string;
   /** Also burn after reading: a successful unlock deletes it. */
   burn?: true;
+  /** The signed-in viewer created it (and may delete it). */
+  mine?: true;
 }
 
 export type EmbeddedPayload = GetResponse | EmbeddedNotFound | BurnPending | LockedPending;
+
+/** GET /auth/me: whether sign-in is configured here, and who is signed in. */
+export interface AuthState {
+  enabled: boolean;
+  user: { name: string } | null;
+}
+
+/**
+ * Values of the short-lived pb_flash cookie the sign-in callback leaves for
+ * the client to report: the sign-in failed, the account is not allowed, or
+ * the identity provider could not be reached.
+ */
+export type AuthFlash = 'signin-failed' | 'denied' | 'unavailable';
+
+/** One row of GET /documents (the signed-in user's own pastes), newest first. */
+export interface OwnedPaste {
+  key: string;
+  /** ISO 8601. */
+  createdAt: string;
+  expiresAt: string | null;
+  /** Content size in bytes. */
+  size: number;
+  burn?: true;
+  locked?: true;
+  private?: true;
+  /** First non-blank line, shortened; absent for burn and protected pastes. */
+  preview?: string;
+}
+
+export interface OwnedList {
+  items: OwnedPaste[];
+  /** Cursor for the next page: pass as ?before=. */
+  next?: string;
+}

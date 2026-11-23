@@ -41,6 +41,8 @@ import { NavigationState, type HistoryState } from './navigation-state';
 import { Notifications } from './notifications';
 import { DraftStore } from './draft-store';
 import { RecentStore } from './recent-store';
+import { AuthClient, FLASH_MESSAGES } from './auth';
+import type { OwnedPaste } from '../shared/types';
 import { advanceStage, HintStageStore, type HintEvent, type HintStage } from './hint-stage';
 
 type ViewMode = 'editing' | 'presenting';
@@ -60,12 +62,20 @@ const SOURCE_HASH = '#source';
 
 /** Recent-list preview of a protected paste: its text never goes to localStorage. */
 const LOCKED_PREVIEW = 'Protected paste';
+/** Recent-list preview of a private paste: it may be opened signed out on a shared machine. */
+const PRIVATE_PREVIEW = 'Private paste';
+/** My pastes row standing in for the list while it loads. */
+const MINE_LOADING_ID = '/loading';
+/** My pastes row that fetches the next page. */
+const MINE_MORE_ID = '/more';
 
 /** A protected paste behind the passphrase gate. */
 interface PendingLock {
   path: ParsedPath;
   salt: string;
   burn: boolean;
+  /** The signed-in user created it. */
+  mine?: boolean;
 }
 type ActivityState = 'idle' | 'loading' | 'saving';
 
@@ -100,6 +110,15 @@ export class AppController {
   private theme: string = this.themes.load() ?? DEFAULT_THEME;
   /** The next save is burn-after-reading; resets after each save. */
   private burnNext = false;
+  /** The next save is private (signed in only); resets after each save. */
+  private privateNext = false;
+  private auth = new AuthClient();
+  /** My pastes as last fetched; null = not loaded (fetched when the menu opens). */
+  private mineItems: PaletteItem[] | null = null;
+  /** Cursor of the next My pastes page; undefined = no more. */
+  private mineNext: string | undefined;
+  /** Leaving for the identity provider: the draft is saved, skip the leave prompt. */
+  private leavingToSignIn = false;
   /** The unread burn paste behind the reveal gate. */
   private pendingBurn: ParsedPath | null = null;
   /** Passphrase (normalized) the next save is protected with; resets after each save. */
@@ -162,6 +181,10 @@ export class AppController {
         lockNext: this.lockNext !== null,
         hasPassphrase: this.document.key !== undefined && this.passphrases.has(this.document.key),
         preview: this.previewContext(),
+        authEnabled: this.auth.state?.enabled === true,
+        userName: this.auth.userName,
+        privateNext: this.privateNext,
+        mine: this.document.mine,
       }),
       run: (id) => this.runCommand(id),
       submenu: (id) => this.submenuItems(id),
@@ -208,6 +231,7 @@ export class AppController {
     this.view.init();
     this.palette.init();
     this.initHints();
+    this.initAuth();
     // A hand-edited or pasted link: #preview turns it on, #source or a #L line
     // anchor off, and no hash means the paste's default view.
     window.addEventListener('hashchange', () => {
@@ -236,7 +260,8 @@ export class AppController {
     );
     window.addEventListener('beforeunload', (e) => {
       // Unsaved text, or a revealed burn paste (no copy is left anywhere else).
-      const unsaved = this.viewMode === 'editing' && this.document.content.trim() !== '';
+      const unsaved =
+        this.viewMode === 'editing' && this.document.content.trim() !== '' && !this.leavingToSignIn;
       if (unsaved || this.document.burn === 'burned') {
         e.preventDefault();
         e.returnValue = '';
@@ -308,12 +333,17 @@ export class AppController {
         expires: this.lifetime ?? undefined,
         burn: this.burnNext,
         passphrase,
+        private: this.privateNext && this.auth.signedIn,
+        owned: this.auth.signedIn,
       });
       this.document.apply(result.paste);
       this.draft.clear();
       const burn = result.paste.burn !== undefined;
       this.burnNext = false;
       this.lockNext = null;
+      this.privateNext = false;
+      // The list is stale now; it is fetched again when next opened.
+      if (this.auth.signedIn) this.mineItems = null;
       // A fresh save shows its source; the preview is one click away.
       this.previewOn = false;
       if (passphrase !== undefined) this.passphrases.set(result.paste.key, passphrase);
@@ -415,7 +445,7 @@ export class AppController {
         return;
       }
       if (err instanceof LockedError) {
-        this.showLockGate({ path, salt: err.salt, burn: err.burn });
+        this.showLockGate({ path, salt: err.salt, burn: err.burn, mine: err.mine });
         return;
       }
       this.showLoadFailure(path, err);
@@ -425,13 +455,20 @@ export class AppController {
   /** Fallback after a failed load: a new document, and the paste is forgotten. */
   private showLoadFailure(path: ParsedPath, err: unknown): void {
     console.error('Load failed:', err);
+    let message = 'Document not found.';
     if (err instanceof Error && err.message === 'Document not found') {
-      this.recent.remove(path.key);
+      // A private paste of yours is a 404 while signed out: keep it in Recent.
+      const entry = this.recent.list().find((e) => e.key === path.key);
+      if (entry?.private && !this.auth.signedIn && this.auth.state?.enabled !== false) {
+        message = 'Not found. If it is your private paste, sign in to open it.';
+      } else {
+        this.recent.remove(path.key);
+      }
     }
 
     this.document.reset();
     this.navigation.replacePath('/');
-    this.notify.toast('Document not found.', 'error');
+    this.notify.toast(message, 'error');
     this.transitionToView('editing');
   }
 
@@ -463,6 +500,7 @@ export class AppController {
     this.document.reset();
     this.document.key = pending.path.key;
     this.document.locked = true;
+    this.document.mine = pending.mine === true;
     this.viewMode = 'presenting';
     this.palette.close(false);
     this.hasRendered = true;
@@ -642,8 +680,12 @@ export class AppController {
 
   /** Remember a paste in the recent list; a protected one without its text. */
   private recordRecent(key: string, path: string): void {
-    const content = this.document.locked ? LOCKED_PREVIEW : this.document.content;
-    this.recent.record(key, path, content);
+    const content = this.document.private
+      ? PRIVATE_PREVIEW
+      : this.document.locked
+        ? LOCKED_PREVIEW
+        : this.document.content;
+    this.recent.record(key, path, content, Date.now(), { private: this.document.private });
   }
 
   /** Read (and so destroy) the burn paste behind the gate. */
@@ -847,8 +889,17 @@ export class AppController {
     if (this.lifetime === 'never') spoken += ', permanent';
     else if (this.lifetime) spoken += `, expires in ${LIFETIME_LABELS[this.lifetime]}`;
     if (this.burnNext) spoken += ', burn after reading';
+    if (this.privateNext) spoken += ', private';
     if (this.lockNext) spoken += ', protected with a passphrase';
-    const icon = this.lockNext ? 'lock' : this.burnNext ? 'burn' : this.lifetime ? 'clock' : null;
+    // Private shares the lock icon; the tooltip tells the two apart.
+    const icon =
+      this.lockNext || this.privateNext
+        ? 'lock'
+        : this.burnNext
+          ? 'burn'
+          : this.lifetime
+            ? 'clock'
+            : null;
     this.palette.setSaveLabel(spoken, icon);
     const mode = this.previewMode();
     this.palette.setPreviewChip({
@@ -900,8 +951,26 @@ export class AppController {
         return this.togglePreview();
       case 'copy-passphrase':
         return this.copyPassphrase();
+      case 'private':
+        this.privateNext = !this.privateNext;
+        // A private paste has no other reader to burn for: one or the other.
+        if (this.privateNext) this.burnNext = false;
+        this.syncChrome();
+        this.notify.toast(
+          this.privateNext ? 'Next save is private: only you can open it' : 'Private off',
+          'info',
+          { brief: true }
+        );
+        return;
+      case 'delete':
+        return this.confirmDelete();
+      case 'sign-in':
+        return this.signIn();
+      case 'sign-out':
+        return void this.signOut();
       case 'burn':
         this.burnNext = !this.burnNext;
+        if (this.burnNext) this.privateNext = false;
         this.syncChrome();
         // The Save chip (and its flame) is hidden while the editor is empty.
         this.notify.toast(
@@ -941,6 +1010,13 @@ export class AppController {
         current: t.id === this.theme,
       }));
     }
+    if (menuId === 'mine') {
+      if (this.mineItems === null) {
+        void this.loadMine();
+        return [{ id: MINE_LOADING_ID, label: 'Loading...', disabled: true }];
+      }
+      return this.mineItems;
+    }
     if (menuId === 'recent') {
       const entries = this.recent.list();
       const items: PaletteItem[] = entries.map((entry) => ({
@@ -971,6 +1047,12 @@ export class AppController {
       this.theme = itemId;
       this.themes.save(itemId);
       this.paintTheme(itemId);
+    } else if (menuId === 'mine') {
+      if (itemId === MINE_LOADING_ID) return;
+      if (itemId === MINE_MORE_ID) return void this.loadMine(this.mineNext);
+      if (!(this.viewMode === 'presenting' && itemId === this.document.key)) {
+        this.openPath(`/${itemId}`);
+      }
     } else if (menuId === 'recent') {
       if (itemId === CLEAR_RECENT_ID) {
         this.recent.clear();
@@ -983,6 +1065,129 @@ export class AppController {
         this.openPath(entry.path);
       }
     }
+  }
+
+  /** Report a sign-in outcome; learn the session state if a session may exist. */
+  private initAuth(): void {
+    const flash = this.auth.takeFlash();
+    if (flash) this.notify.toast(FLASH_MESSAGES[flash], 'error');
+    const learned = () => {
+      this.syncChrome();
+      this.palette.refresh();
+    };
+    if (this.auth.hasHint()) void this.auth.refresh().then(learned);
+    // Signed-out readers who never open the palette never ask the server.
+    this.palette.onOpened(() => {
+      if (this.auth.state === null) void this.auth.refresh().then(learned);
+    });
+  }
+
+  /** Off to the identity provider; the unsaved text waits in the draft store. */
+  private signIn(): void {
+    if (this.viewMode === 'editing') {
+      const content = this.view.getContentFromDOM();
+      if (content.trim()) this.draft.saveNow(content);
+    }
+    this.leavingToSignIn = true;
+    // Cancelled by a burn prompt or bfcache: unsaved edits matter again.
+    window.addEventListener('pageshow', () => (this.leavingToSignIn = false), { once: true });
+    setTimeout(() => (this.leavingToSignIn = false), 5000);
+    const { pathname, search, hash } = window.location;
+    this.auth.signIn(`${pathname}${search}${hash}`);
+  }
+
+  private async signOut(): Promise<void> {
+    try {
+      await this.auth.signOut();
+    } catch {
+      this.notify.toast('Could not reach the server. Try again.', 'error');
+      return;
+    }
+    this.privateNext = false;
+    this.mineItems = null;
+    this.mineNext = undefined;
+    // Memory copies carry `mine` and private text: none survive a sign-out.
+    this.session.forgetAll();
+    if (this.document.private) {
+      // Its text is for the owner only: leave nothing of it in the tab.
+      this.newDocument(true);
+      this.view.clearViewer();
+    } else {
+      this.document.mine = false;
+    }
+    this.syncChrome();
+    this.notify.toast('Signed out', 'info', { brief: true });
+  }
+
+  /** Fetch a page of My pastes for the open menu: the first, or the one after `before`. */
+  private async loadMine(before?: string): Promise<void> {
+    const shown = before ? (this.mineItems ?? []).filter((i) => i.id !== MINE_MORE_ID) : [];
+    if (before) {
+      this.mineItems = [...shown, { id: MINE_LOADING_ID, label: 'Loading...', disabled: true }];
+      this.palette.refresh();
+    }
+    try {
+      const list = await this.session.listMine(before);
+      this.mineNext = list.next;
+      this.mineItems = [...shown, ...list.items.map((p) => this.mineItem(p))];
+      if (list.next) {
+        this.mineItems.push({ id: MINE_MORE_ID, label: 'Load more', keepOpen: true });
+      }
+    } catch {
+      const failed = { id: MINE_LOADING_ID, label: 'Could not load your pastes', disabled: true };
+      this.mineItems = [...shown, failed];
+      this.palette.refresh();
+      // Try again next time: keep the rows so far, offer the rest again.
+      this.mineItems = before
+        ? [...shown, { id: MINE_MORE_ID, label: 'Load more', keepOpen: true }]
+        : null;
+      return;
+    }
+    this.palette.refresh();
+  }
+
+  private mineItem(p: OwnedPaste): PaletteItem {
+    const label = p.preview ?? (p.locked ? LOCKED_PREVIEW : p.burn ? 'Burn after reading' : p.key);
+    return {
+      id: p.key,
+      label,
+      hint: p.private ? `private ${p.key}` : p.key,
+      icon: p.private || p.locked ? 'lock' : p.burn ? 'burn' : undefined,
+      keywords: [p.key, ...(p.private ? ['private'] : [])],
+    };
+  }
+
+  /** Delete the paste on screen, after asking. */
+  private confirmDelete(): void {
+    const key = this.document.key;
+    if (!key || !this.document.mine) return;
+    this.palette.showPrompt({
+      title: 'Delete paste',
+      text: 'Delete this paste from the server for good? Its link stops working.',
+      confirmLabel: 'Delete',
+      busyLabel: 'Deleting...',
+      cancelLabel: 'Keep',
+      dismissible: true,
+      confirm: () => void this.deletePaste(key),
+      cancel: () => this.palette.hidePrompt(),
+    });
+  }
+
+  private async deletePaste(key: string): Promise<void> {
+    this.palette.setPromptBusy(true);
+    try {
+      await this.session.remove(key);
+    } catch (err) {
+      this.palette.hidePrompt();
+      const gone = err instanceof Error && err.message === 'Document not found';
+      this.notify.toast(gone ? 'Already gone.' : 'Could not delete. Try again.', 'error');
+      if (!gone) return;
+    }
+    this.palette.hidePrompt();
+    this.recent.remove(key);
+    this.mineItems = null;
+    this.notify.toast('Paste deleted');
+    this.newDocument(true);
   }
 
   /** The page and the palette (a .theme-scope) in a confirmed theme. */

@@ -19,6 +19,39 @@ const ids = (ctx: Partial<CommandContext>) =>
   availableCommands({ ...base, ...ctx }).map((c) => c.id);
 
 describe('availableCommands', () => {
+  it('offers sign-in commands by sign-in state', () => {
+    expect(ids({ authEnabled: false })).not.toContain('sign-in');
+    expect(ids({ authEnabled: true })).toContain('sign-in');
+    const signedIn = ids({ authEnabled: true, userName: 'Ada' });
+    expect(signedIn).toEqual(expect.arrayContaining(['sign-out', 'mine']));
+    expect(signedIn).not.toContain('sign-in');
+    expect(ids({ authEnabled: true })).not.toContain('mine');
+    const out = availableCommands({ ...base, userName: 'Ada' }).find((c) => c.id === 'sign-out');
+    expect(out?.hint).toBe('Ada');
+  });
+
+  it('offers the private toggle while editing and signed in', () => {
+    expect(ids({ mode: 'editing' })).not.toContain('private');
+    expect(ids({ mode: 'presenting', userName: 'Ada' })).not.toContain('private');
+    const find = (ctx: Partial<CommandContext>) =>
+      availableCommands({ ...base, mode: 'editing', userName: 'Ada', ...ctx }).find(
+        (c) => c.id === 'private'
+      )!;
+    expect(find({})).toMatchObject({ label: 'Make private', icon: undefined });
+    expect(find({ privateNext: true })).toMatchObject({
+      label: "Don't make private",
+      icon: 'lock',
+    });
+  });
+
+  it('offers delete on an own paste only', () => {
+    expect(ids({ userName: 'Ada', mine: true })).toContain('delete');
+    expect(ids({ userName: 'Ada', mine: false })).not.toContain('delete');
+    expect(ids({ mine: true })).not.toContain('delete');
+    expect(ids({ userName: 'Ada', mine: true, burn: 'burned' })).not.toContain('delete');
+    expect(ids({ mode: 'editing', userName: 'Ada', mine: true })).not.toContain('delete');
+  });
+
   it('offers the theme menu everywhere, naming the theme on screen', () => {
     for (const mode of ['editing', 'presenting'] as const) {
       const theme = availableCommands({ ...base, mode, themeLabel: 'Monokai' }).find(

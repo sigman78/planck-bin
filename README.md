@@ -20,6 +20,9 @@ Pastebin for Cloudflare Workers with D1 storage. API compatible with haste-serve
 - Five color themes (Solarized Dark and Light, GitHub, Atom One Dark, Monokai).
 - Paste expiry with a nightly cleanup cron, rate limits, optional storage cap.
 - Local drafts and recent paste list in the browser.
+- Optional sign-in through any OpenID Connect provider (Google, Pocket ID and others), with an
+  optional email allowlist. Signed in, you get a list of your own pastes, can delete them, and can
+  save private pastes that only you can open.
 
 ## Background
 
@@ -91,6 +94,49 @@ that does not exist gets a `404` page the client recognizes, so it shows "not fo
 second lookup. Any other failure (rate limit, storage error, a paste over 128 KB) serves the plain
 page, which is exactly the client-rendered path you get with the flag off.
 
+### Sign-in
+
+Sign-in is off unless all four of `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and
+`SESSION_SECRET` are set. Set them as secrets (`pnpm exec wrangler secret put NAME`), or in
+`.dev.vars` for `wrangler dev`. If only some are set, sign-in stays off and the worker logs why.
+
+| Variable              | Description                                                                |
+| --------------------- | -------------------------------------------------------------------------- |
+| `OIDC_ISSUER`         | Provider issuer URL; must match its discovery document exactly             |
+| `OIDC_CLIENT_ID`      | Client ID registered with the provider                                     |
+| `OIDC_CLIENT_SECRET`  | Client secret (a confidential client)                                      |
+| `SESSION_SECRET`      | At least 32 characters; signs the session cookie                           |
+| `OIDC_ALLOWED_EMAILS` | Optional comma-separated list of emails allowed to sign in; unset = anyone |
+
+Register `https://YOUR-HOST/auth/callback` as the redirect URI. The worker requests the
+`openid profile email` scopes and uses the authorization code flow with PKCE. The client
+secret goes in an HTTP Basic header (`client_secret_basic`), or in the request body when the
+provider's discovery document lists only `client_secret_post`. Generate the session
+secret with `openssl rand -base64 32`. Changing it signs everyone out.
+
+- Google: issuer `https://accounts.google.com`. In the Google Cloud console create an OAuth client
+  of type "Web application" and add the redirect URI.
+- Pocket ID (or another self-hosted provider): issuer is the provider's base URL, for example
+  `https://id.example.com`. Create a client that is not public and add the redirect URI.
+
+With `OIDC_ALLOWED_EMAILS` set, only those addresses may sign in, and only when the provider
+reports the email as verified. The list is checked again on every request, so removing an address
+takes effect at once. Without it (unset or empty), any account at the provider may sign in. A
+value that names no address, such as `,`, lets nobody in and logs a warning. A session records
+whether its email was verified, so turning the allowlist on later does not let in a session
+whose email was never verified.
+
+A session lasts 30 days and is renewed while in use. It is a signed cookie; the server keeps no
+session table. A user is identified by the issuer and the provider's subject ID, so switching
+`OIDC_ISSUER` to another provider leaves pastes owned by the old accounts unreachable from the
+list (they stay readable by link unless private).
+
+Every paste saved while signed in is owned by that account. A private paste is a `404` for
+everyone else, including signed-out visits by its owner. Private means access control on the
+server, not encryption: combine it with a passphrase to keep the text from the database too. A
+private paste cannot also be burn after reading. Deleting a public paste does not reach browsers
+that cached it; they may keep it for up to `BROWSER_CACHE_MAX_AGE`.
+
 ## API
 
 ```bash
@@ -129,6 +175,16 @@ curl --data-binary @secret.txt "https://your-worker.dev/documents?expires=3d&bur
   guesses cannot exceed the cap; a right token is not counted. A protected burn paste is deleted
   by its unlock, not by `GET`. Unlocks spend a read rate-limit token.
 - Built-in pages such as `about` work on both and carry `"frozen": true`.
+- With sign-in configured, these need the session cookie (sent by the browser after signing in):
+  - `POST /documents?private=1` saves a private paste (`401` signed out, `400` with `burn=1`).
+    Pastes saved while signed in carry `"mine": true` (and `"private": true`) on later reads by
+    their owner.
+  - `GET /documents` lists your pastes, newest first: `{"items": [{"key", "createdAt",
+"expiresAt", "size", "preview"}], "next"}`, 50 per page. Pass `next` back as `?before=` for
+    the next page. Burn and protected pastes have no `preview`.
+  - `DELETE /documents/KEY` deletes your own paste: `204`, or `404` if it is not yours.
+  - `/auth/login?return=/path` starts sign-in, `/auth/callback` finishes it, `POST /auth/logout`
+    signs out, and `GET /auth/me` returns `{"enabled", "user": {"name"} | null}`.
 - Other methods on these routes return `405` with an `Allow` header.
 
 ## Command palette
@@ -148,8 +204,8 @@ It also switches the highlighting language and lists recent pastes kept in this 
 editing, **Expires** picks the lifetime of new pastes (remembered in this browser) and **Burn
 after reading** makes the next save a one-time paste (picked again, it reads **Don't burn after
 reading** and turns it off). Non-default choices show as an icon on
-the Save chip: a clock for a lifetime, a flame for burn (the flame wins when both are set); the
-details are in its tooltip. Burn pastes are not added to the recent list.
+the Save chip: a clock for a lifetime, a flame for burn, a lock for a passphrase or a private
+paste. Only one icon shows: lock first, then flame, then clock. The tooltip lists every choice. Burn pastes are not added to the recent list.
 
 **Theme** switches the colors of the whole page: Solarized Dark (default), Solarized Light,
 GitHub, Atom One Dark or Monokai. Arrow keys preview a theme, Enter keeps it, Escape goes back.
@@ -190,6 +246,20 @@ Known limitation: a `#preview` link can show the source for a frame or two befor
 replaces it. The server never sees the hash, so it cannot hide the server-rendered text the way it
 does for the about page. A one-line inline script in `<head>` (allowed in the CSP by its hash) fixes
 this and was tried, but is left out for now.
+
+With sign-in configured, **Sign in** goes to the provider and comes back to the same page (unsaved
+text is kept as a draft). Signed in, the palette adds:
+
+- **My pastes**: your pastes on this server, from any browser, newest first. Private and
+  protected pastes are marked with a lock, burn pastes with a flame. Enter opens one. The list
+  loads 50 at a time; **Load more** at the end fetches the next 50.
+- **Make private** (while editing): the next save is private. It works like burn after reading:
+  the Save chip shows a lock (the same icon as for a passphrase; the tooltip tells them apart),
+  and running it again (**Don't make private**) turns it off. Burn and private turn each other
+  off. Private pastes appear in the recent list as "Private paste", without their text.
+- **Delete paste** (on your own paste): asks, then deletes it from the server.
+- **Sign out**, with your name as its hint. If a private paste is on screen, it is removed from
+  the page and an empty editor opens.
 
 Printing (the browser's Print) produces a plain black-and-white source listing: numbered lines,
 long lines wrapped under their own number, and the paste address, line count and page numbers in

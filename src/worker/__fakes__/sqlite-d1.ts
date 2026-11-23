@@ -1,8 +1,8 @@
 /**
  * A D1Database backed by a real in-memory SQLite (node:sqlite) with every
  * migration applied, for tests whose SQL is the point (protected pastes:
- * attempt counting, RETURNING, concurrent guesses). Only first() and run()
- * are implemented, which is all the store uses.
+ * attempt counting, RETURNING, concurrent guesses, private pastes). Only
+ * first(), all() and run() are implemented, which is all the store uses.
  */
 
 // The project has no @types/node; these are the few Node APIs used here.
@@ -11,6 +11,7 @@ declare const __dirname: string;
 
 interface SqliteStatement {
   get(...args: unknown[]): Record<string, unknown> | undefined;
+  all(...args: unknown[]): Record<string, unknown>[];
   run(...args: unknown[]): { changes: number | bigint };
 }
 
@@ -42,6 +43,9 @@ export function sqliteD1(): SqliteD1 {
   const statement = (sql: string, args: unknown[]) => ({
     async first<T>() {
       return (raw.prepare(sql).get(...normalize(args)) ?? null) as T | null;
+    },
+    async all<T>() {
+      return { success: true, results: raw.prepare(sql).all(...normalize(args)) as T[], meta: {} };
     },
     async run() {
       const { changes } = raw.prepare(sql).run(...normalize(args));

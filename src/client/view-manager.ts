@@ -240,6 +240,16 @@ export class ViewManager {
     this.resetLineHighlight();
   }
 
+  /** Drop the shown paste from the (hidden) viewer: nothing of it stays in the DOM. */
+  clearViewer(): void {
+    this.setPreview(null);
+    this.finder.clear();
+    clearSyntax();
+    this.viewerCode.textContent = '';
+    this.gutter.textContent = '';
+    this.resetLineHighlight();
+  }
+
   /**
    * Show a rendered preview in place of the viewer and gutter, or (null) go
    * back to the source. The viewer keeps its text and highlights meanwhile.

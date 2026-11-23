@@ -10,6 +10,8 @@ export interface RecentEntry {
   path: string;
   preview: string;
   at: number;
+  /** A private paste: a 404 while signed out keeps it listed. */
+  private?: true;
 }
 
 const RECENT_KEY = 'haste-recent';
@@ -44,8 +46,20 @@ export class RecentStore {
     }
   }
 
-  record(key: string, path: string, content: string, now: number = Date.now()): void {
-    const entry: RecentEntry = { key, path, preview: previewOf(content, key), at: now };
+  record(
+    key: string,
+    path: string,
+    content: string,
+    now: number = Date.now(),
+    flags: { private?: boolean } = {}
+  ): void {
+    const entry: RecentEntry = {
+      key,
+      path,
+      preview: previewOf(content, key),
+      at: now,
+      ...(flags.private ? { private: true as const } : {}),
+    };
     const rest = this.list().filter((e) => e.key !== key);
     this.write([entry, ...rest].slice(0, RECENT_LIMIT));
   }

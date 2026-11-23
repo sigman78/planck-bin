@@ -18,6 +18,10 @@ export class Paste {
   burn?: BurnState;
   /** Protected paste: encrypted on the server, shown here decrypted (or behind the lock gate). */
   locked: boolean = false;
+  /** The signed-in user created it (and may delete it). */
+  mine: boolean = false;
+  /** Readable by its owner only. */
+  private: boolean = false;
 
   get isLoaded(): boolean {
     return this.key !== undefined;
@@ -30,6 +34,8 @@ export class Paste {
     this.frozen = false;
     this.burn = undefined;
     this.locked = false;
+    this.mine = false;
+    this.private = false;
   }
 
   apply(data: {
@@ -39,6 +45,8 @@ export class Paste {
     frozen?: boolean;
     burn?: BurnState;
     locked?: boolean;
+    mine?: boolean;
+    private?: boolean;
   }): void {
     this.content = data.content;
     this.key = data.key;
@@ -46,5 +54,7 @@ export class Paste {
     this.frozen = data.frozen ?? false;
     this.burn = data.burn;
     this.locked = data.locked ?? false;
+    this.mine = data.mine ?? false;
+    this.private = data.private ?? false;
   }
 }

@@ -36,7 +36,23 @@ const UNLOCK_BODY_LIMIT = 1024;
 
 /** HEAD runs the GET handler (and its D1 read), so it is limited like GET. */
 function isDocumentRead(path: string, method: string): boolean {
-  return (method === 'GET' || method === 'HEAD') && /^\/(?:documents|raw)\/[^/]+$/.test(path);
+  if (method !== 'GET' && method !== 'HEAD') return false;
+  // /documents alone is the signed-in user's list.
+  return path === '/documents' || /^\/(?:documents|raw)\/[^/]+$/.test(path);
+}
+
+/** Deleting an own paste: a browser write like creation. */
+function isDocumentDelete(path: string, method: string): boolean {
+  return method === 'DELETE' && /^\/documents\/[^/]+$/.test(path);
+}
+
+/** Sign-in steps that make outbound requests to the identity provider. */
+function isSignInStep(path: string, method: string): boolean {
+  return method === 'GET' && (path === '/auth/login' || path === '/auth/callback');
+}
+
+function isSignOut(path: string, method: string): boolean {
+  return method === 'POST' && path === '/auth/logout';
 }
 
 function isCrossOriginBrowserWrite(request: Request): boolean {
@@ -53,8 +69,8 @@ function isCrossOriginBrowserWrite(request: Request): boolean {
 }
 
 function rateLimitKey(request: Request): string {
-  // This service has no accounts or API keys, so the connecting IP is the
-  // least-bad coarse identity available. Keep configured limits NAT-friendly.
+  // Sign-in is optional and the API stays anonymous, so the connecting IP is
+  // the least-bad coarse identity available. Keep configured limits NAT-friendly.
   return request.headers.get('cf-connecting-ip') || 'unknown-client';
 }
 
@@ -96,6 +112,23 @@ const enforceRequestPolicy: MiddlewareHandler<App> = async (c, next) => {
 
   if (isDocumentRead(path, method)) {
     const limited = await checkRateLimit(c, c.env.READ_RATE_LIMITER);
+    if (limited) return limited;
+  }
+
+  // Session-authorized writes: SameSite=Lax keeps the cookie off cross-site
+  // requests, and this also turns away same-site sibling origins.
+  if (isDocumentDelete(path, method) || isSignOut(path, method)) {
+    if (isCrossOriginBrowserWrite(c.req.raw)) {
+      return c.json({ message: 'Cross-origin request is not allowed' }, 403);
+    }
+    if (isDocumentDelete(path, method)) {
+      const limited = await checkRateLimit(c, c.env.CREATE_RATE_LIMITER);
+      if (limited) return limited;
+    }
+  }
+
+  if (isSignInStep(path, method)) {
+    const limited = await checkRateLimit(c, c.env.CREATE_RATE_LIMITER);
     if (limited) return limited;
   }
 
