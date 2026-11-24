@@ -571,8 +571,11 @@
 .island-row {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 16px;
-    padding: 5px 14px;
+    margin: 0 4px; /* inset selection; text stays 14px from the edge */
+    padding: 5px 10px;
+    border-radius: 6px;
     line-height: 16px;
     white-space: nowrap;
     color: var(--color-editor-text);
@@ -601,13 +604,22 @@
     color: var(--color-placeholder);
 }
 
-/* A shortcut as key caps: modifier icons, then the main key. Fits the 16px row line. */
-/* Neutral, not theme-tinted: the text color with its chroma dropped. */
+/* Selected row: hints step up from placeholder to text contrast. */
+.island-row[aria-selected='true'] kbd {
+    color: var(--color-editor-text);
+}
+
+/*
+ * A shortcut: modifiers as bare glyphs, then the main key as the only cap, so
+ * the key that tells rows apart stands out from the shared prefix. Fits the
+ * 16px row line. Neutral, not theme-tinted: the text color with its chroma
+ * dropped.
+ */
 .island-row .island-keys {
     color: oklch(from var(--color-editor-text) l 0 h / 0.7);
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
 }
 
 .island-key {
@@ -615,23 +627,43 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 16px;
     height: 16px;
-    padding: 0 3px;
-    border: 1px solid color-mix(in oklab, currentColor 30%, transparent);
-    border-radius: 3px;
     line-height: 1;
 }
 
 .island-key-icon {
     display: block;
     flex: none;
+    width: 12px; /* the 12x12 viewBox at 1:1 */
+    height: 12px;
+}
+
+.island-key-main {
+    min-width: 16px;
+    margin-left: 4px;
+    padding: 0 3px;
+    border: 1px solid color-mix(in oklab, var(--color-editor-text) 35%, transparent);
+    border-radius: 3px;
+    background: var(--color-island-chip);
+    color: var(--color-editor-text);
+}
+
+.island-row[aria-selected='true'] .island-keys {
+    color: oklch(from var(--color-logo) l 0 h / 0.7);
+}
+
+.island-row[aria-selected='true'] .island-key-main {
+    border-color: color-mix(in oklab, var(--color-logo) 45%, transparent);
+    color: var(--color-logo);
+}
+
+.island-row[aria-disabled='true'] .island-keys {
+    opacity: 0.5;
 }
 
 /* State icon in place of a hint, e.g. the flame on "Don't burn after reading". */
 .island-row .island-save-icon {
     flex: none;
-    align-self: center;
     margin: 0;
 }
 
