@@ -104,41 +104,10 @@ body {
 	background: var(--color-bg);
 	padding: var(--body-padding);
 	box-sizing: border-box;
-	/* stacking context so the grain (z-index -1) paints above this
-	   background and below all page content */
-	isolation: isolate;
-}
-
-/* --- paper grain -------------------------------------------------------------
-   A faint noise over the whole page, under all content. One 160px SVG tile
-   (feTurbulence, stitched so it repeats without seams) is rasterized once as
-   a background image; no live filter runs on any element. The layer is
-   viewport-fixed, so scrolling moves content over it and repaints nothing,
-   and its cost does not grow with the paste length. No blend mode: plain
-   alpha keeps it a cheap compositor layer. z-index -1 inside the isolated
-   body puts it under all content, positioned or not (a fixed layer at
-   z-index auto would paint over in-flow text), and it takes no pointer
-   events, so selection, ::highlight() and find paint above it untouched. It is part
-   of the root snapshot in view transitions; it has no transition name.
-   Strength: --paper-noise-opacity (tokens.css), per theme in themes.css.
-   Grey value comes from one noise channel, alpha from another. */
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    opacity: var(--paper-noise-opacity);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1.6 0 0 0 -.3 1.6 0 0 0 -.3 1.6 0 0 0 -.3 0 1.6 0 0 -.3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 160px 160px;
-}
-
-/* Off where texture is noise in the bad sense: paper, forced colors, and
-   users asking for less transparency or more contrast. */
-@media print, (forced-colors: active), (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-    body::before {
-        display: none;
-    }
+	/* Long lines scroll the page, not the viewer or editor, so the scrollbar
+	   sits at the window bottom: the body grows to the widest line, its right
+	   padding included. A rendered preview wraps and stays window-wide. */
+	min-width: fit-content;
 }
 
 /* editor - shared editing and presenting styles */
@@ -147,8 +116,6 @@ body::before {
     display: flex;
     align-items: flex-start;
     --editor-zoom: 1;
-    overflow-x: auto;
-    overflow-y: hidden;
     position: relative;
 
     /* Consolidated typography - all children inherit these */
@@ -166,6 +133,19 @@ body::before {
     user-select: none;
     min-height: calc(100vh - 2 * var(--body-padding));
     box-sizing: border-box;
+}
+
+/* Long lines scroll the page sideways; the numbers stay at the window's left
+   edge, over the code sliding under them. Only with a mouse or trackpad:
+   iOS Safari draws the page under its translucent toolbar but clips sticky
+   layers at the toolbar edge, so on touch screens the numbers scroll along. */
+@media (hover: hover) and (pointer: fine) {
+    #gutter {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--color-bg);
+    }
 }
 
 #gutter a, #gutter span {
@@ -199,7 +179,9 @@ body::before {
     background: var(--color-line-highlight);
     border-radius: 3px;
     pointer-events: none;
-    z-index: 0;
+    /* Above the pinned gutter's solid background, so the line shows across
+       the numbers too; the tint is faint enough to lie over the text. */
+    z-index: 3;
     opacity: 0;
     transition: opacity 0.15s ease;
 }
@@ -238,6 +220,17 @@ body::before {
     line-height: inherit;
 }
 
+/* Sized to its content both ways, so long lines widen the page instead of
+   scrolling inside the textarea. Without field-sizing it keeps the inner
+   horizontal scroll. */
+@supports (field-sizing: content) {
+    #editor {
+        width: auto;
+        flex: 1 0 auto;
+        overflow: hidden;
+    }
+}
+
 #editor::placeholder {
     color: var(--color-placeholder);
 }
@@ -252,11 +245,9 @@ body::before {
     display: none;
     margin: 0;
     background: transparent;
-    width: 100%;
+    flex: 1 0 auto;
     white-space: pre;
-    overflow-x: auto;
     tab-size: 2;
-    scrollbar-width: thin;
     min-height: calc(100vh - 2 * var(--body-padding));
     position: relative;
     z-index: 1;
@@ -288,6 +279,8 @@ body::before {
 
 #viewer code {
     display: block;
+    /* syntax-base.css gives pre code.hljs its own overflow-x; here the page scrolls. */
+    overflow: visible;
     background: transparent !important;
     padding: 0;
     font-family: inherit;

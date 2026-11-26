@@ -63,7 +63,7 @@ export class ViewManager {
     this.viewerCode = this.viewer.querySelector('code') as HTMLElement;
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
     this.preview = document.getElementById('preview')!;
-    this.finder = new ViewerFind(this.viewerCode, this.viewer);
+    this.finder = new ViewerFind(this.viewerCode, this.gutter);
 
     this.lineNumbers = options.lineNumbers;
     if (!this.lineNumbers) {
@@ -337,6 +337,11 @@ export class ViewManager {
     const container = document.getElementById('editor-container')!;
     container.style.setProperty('--editor-zoom', String(this.editorZoom));
     sessionStorage.setItem(this.ZOOM_KEY, String(this.editorZoom));
+    // The caret, scrolled into view while typing, stays clear of the pinned
+    // gutter (its width follows the zoom).
+    document.documentElement.style.scrollPaddingLeft = this.lineNumbers
+      ? `${this.gutter.offsetWidth}px`
+      : '';
     this.updateLineHighlight();
   }
 
@@ -400,14 +405,14 @@ export class ViewManager {
     return true;
   }
 
-  /** Scroll the page so the given 1-based line sits mid-viewport. */
+  /** Scroll the page so the given 1-based line sits mid-viewport, line start in view. */
   private scrollToLine(line: number): void {
     const container = document.getElementById('editor-container')!;
     const lineHeight = parseFloat(getComputedStyle(container).lineHeight) || 20;
     const lineTop =
       container.getBoundingClientRect().top + window.scrollY + (line - 1) * lineHeight;
     const top = lineTop - window.innerHeight / 2 + lineHeight / 2;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
+    window.scrollTo({ top: Math.max(0, top), left: 0, behavior: 'instant' });
   }
 
   private adjustZoom(delta: number): void {

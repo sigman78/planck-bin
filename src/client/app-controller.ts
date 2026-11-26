@@ -749,7 +749,8 @@ export class AppController {
       this.palette.settle();
       const revealed = options.revealAnchor === true && this.view.revealAnchorLine();
       if (!revealed && options.scrollY !== null && options.scrollY !== undefined) {
-        window.scrollTo({ top: options.scrollY, behavior: 'instant' });
+        // Back to the line starts too: long lines scroll the page sideways.
+        window.scrollTo({ top: options.scrollY, left: 0, behavior: 'instant' });
       }
     };
     // The page wipe is for in-app navigation; the first render, and a step
@@ -825,7 +826,7 @@ export class AppController {
   private togglePreview(): void {
     if (!this.previewMode()) return;
     this.setPreviewOn(!this.previewOn);
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }
 
   /**

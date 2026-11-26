@@ -41,11 +41,11 @@ export class ViewerFind {
 
   /**
    * @param root element whose text is searched (the viewer's code element)
-   * @param scroller horizontally scrolling ancestor (the viewer pre)
+   * @param cover element pinned over the window's left edge (the gutter), if any
    */
   constructor(
     private readonly root: HTMLElement,
-    private readonly scroller: HTMLElement
+    private readonly cover?: HTMLElement
   ) {}
 
   search(query: string): FindStatus {
@@ -112,15 +112,20 @@ export class ViewerFind {
     this.reveal(current);
   }
 
-  /** Scroll the page vertically and the viewer horizontally to the match. */
+  /**
+   * Scroll the page to the match: vertically to mid-window, and horizontally
+   * (long lines scroll the page) only when the match is outside the visible
+   * columns: right of the pinned gutter, left of the vertical scrollbar.
+   */
   private reveal(range: Range): void {
     const rect = range.getBoundingClientRect();
     const top = rect.top + window.scrollY - window.innerHeight / 2 + rect.height / 2;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
-
-    const box = this.scroller.getBoundingClientRect();
-    if (rect.left < box.left || rect.right > box.right) {
-      this.scroller.scrollLeft += rect.left - box.left - box.width / 2;
-    }
+    const from = Math.max(0, this.cover?.getBoundingClientRect().right ?? 0);
+    const to = document.documentElement.clientWidth;
+    const offscreen = rect.left < from || rect.right > to;
+    const left = offscreen
+      ? rect.left + window.scrollX - (from + to) / 2 + rect.width / 2
+      : window.scrollX;
+    window.scrollTo({ top: Math.max(0, top), left: Math.max(0, left), behavior: 'instant' });
   }
 }
