@@ -56,6 +56,7 @@ export class ViewManager {
   private currentLine: number = 0;
   private dragCounter: number = 0;
   private finder: ViewerFind;
+  private scrollbars: StickyScrollbar[];
 
   constructor(options: RenderOptions) {
     this.appName = options.appName;
@@ -65,8 +66,7 @@ export class ViewManager {
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
     this.preview = document.getElementById('preview')!;
     this.finder = new ViewerFind(this.viewerCode, this.viewer);
-    new StickyScrollbar(this.viewer);
-    new StickyScrollbar(this.editor);
+    this.scrollbars = [new StickyScrollbar(this.viewer), new StickyScrollbar(this.editor)];
 
     this.lineNumbers = options.lineNumbers;
     if (!this.lineNumbers) {
@@ -213,6 +213,8 @@ export class ViewManager {
       this.updateLineHighlight();
     }
     this.renderUIState(state);
+    // A script-set editor value fires no input event.
+    for (const bar of this.scrollbars) bar.refresh();
   }
 
   /**

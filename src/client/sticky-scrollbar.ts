@@ -1,28 +1,38 @@
 /**
- * StickyScrollbar - a horizontal scrollbar pinned to the bottom of the window
- * for an element that scrolls sideways on its own but is taller than the
- * window (the viewer pre, the editor textarea). Its own scrollbar sits after
- * the last line, out of reach on a long paste; this bar stands in for it.
+ * StickyScrollbar - the horizontal scrollbar of an element that scrolls
+ * sideways on its own but is taller than the window (the viewer pre, the
+ * editor textarea), moved to the bottom edge of the window. The element's own
+ * scrollbar would sit after the last line, out of reach on a long paste.
  *
  * The bar is a fixed, empty scroller with a spacer as wide as the target's
- * content, laid over the target's columns. The two scroll positions are kept
- * in step both ways. The bar shows only while the target is displayed, has
- * lines wider than itself, and its own scrollbar is below the window edge.
+ * content, laid over the target's columns; the two scroll positions are kept
+ * in step both ways. The target's own horizontal scrollbar is hidden (CSS,
+ * .has-sticky-scrollbar), so there is only ever one, always at the window
+ * edge. The bar shows while the target is on screen and has lines wider than
+ * itself. Overlay scrollbars (macOS, mobile) take no room, so there the bar
+ * gets a drawn scrollbar instead (.sticky-scrollbar-drawn).
  */
 
 export class StickyScrollbar {
   private readonly bar: HTMLDivElement;
   private readonly spacer: HTMLDivElement;
   private frame = 0;
+  /** Whether this bar set the root's scroll-padding-bottom (two bars share it). */
+  private padded = false;
 
   constructor(private readonly target: HTMLElement) {
     this.bar = document.createElement('div');
     this.bar.className = 'sticky-scrollbar';
+    this.bar.dataset.for = target.id;
     this.bar.setAttribute('aria-hidden', 'true');
+    // A scroll container is a tab stop in recent Chrome; keyboard users
+    // scroll the target itself.
+    this.bar.tabIndex = -1;
     this.bar.hidden = true;
     this.spacer = document.createElement('div');
     this.bar.appendChild(this.spacer);
     document.body.appendChild(this.bar);
+    target.classList.add('has-sticky-scrollbar');
 
     this.bar.addEventListener('scroll', () => this.follow(this.bar, this.target), {
       passive: true,
@@ -30,7 +40,8 @@ export class StickyScrollbar {
     target.addEventListener('scroll', () => this.follow(target, this.bar), { passive: true });
 
     const schedule = () => this.schedule();
-    window.addEventListener('scroll', schedule, { passive: true });
+    // Capture: also catches scrolling ancestors other than the window.
+    document.addEventListener('scroll', schedule, { capture: true, passive: true });
     window.addEventListener('resize', schedule);
     // Display toggles, zoom and line-count changes resize the target; a
     // longer line with the same line count only changes its content.
@@ -50,6 +61,11 @@ export class StickyScrollbar {
     }
   }
 
+  /** Re-measure after a change no observer sees (a script setting a textarea's value). */
+  refresh(): void {
+    this.schedule();
+  }
+
   private follow(from: HTMLElement, to: HTMLElement): void {
     if (Math.abs(to.scrollLeft - from.scrollLeft) >= 1) to.scrollLeft = from.scrollLeft;
   }
@@ -64,17 +80,33 @@ export class StickyScrollbar {
 
   private update(): void {
     const t = this.target;
-    const shown = t.getClientRects().length > 0;
-    const rect = t.getBoundingClientRect();
-    const overflows = t.scrollWidth - t.clientWidth > 1;
-    const viewportBottom = window.innerHeight;
-    const needed = shown && overflows && rect.bottom > viewportBottom && rect.top < viewportBottom;
+    const needed = t.getClientRects().length > 0 && t.scrollWidth - t.clientWidth > 1;
+    const rect = needed ? t.getBoundingClientRect() : null;
+    const onScreen = rect !== null && rect.top < window.innerHeight && rect.bottom > 0;
 
-    this.bar.hidden = !needed;
-    if (!needed) return;
+    this.bar.hidden = !onScreen;
+    if (!onScreen) {
+      this.setPadding(null);
+      return;
+    }
     this.bar.style.left = `${rect.left + t.clientLeft}px`;
     this.bar.style.width = `${t.clientWidth}px`;
     this.spacer.style.width = `${t.scrollWidth}px`;
+    const overlay = this.bar.offsetHeight - this.bar.clientHeight === 0;
+    if (overlay) this.bar.classList.add('sticky-scrollbar-drawn');
     this.follow(t, this.bar);
+    // Keep the caret or a scrolled-to line out from under the bar.
+    this.setPadding(this.bar.offsetHeight);
+  }
+
+  private setPadding(px: number | null): void {
+    const root = document.documentElement.style;
+    if (px !== null) {
+      root.scrollPaddingBottom = `${px}px`;
+      this.padded = true;
+    } else if (this.padded) {
+      root.scrollPaddingBottom = '';
+      this.padded = false;
+    }
   }
 }
