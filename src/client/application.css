@@ -168,6 +168,12 @@ body::before {
     user-select: none;
     min-height: calc(100vh - 2 * var(--body-padding));
     box-sizing: border-box;
+    /* Long lines scroll the page sideways; the numbers stay at the window's
+       left edge, over the code sliding under them. */
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--color-bg);
 }
 
 #gutter a, #gutter span {
@@ -201,7 +207,9 @@ body::before {
     background: var(--color-line-highlight);
     border-radius: 3px;
     pointer-events: none;
-    z-index: 0;
+    /* Above the pinned gutter's solid background, so the line shows across
+       the numbers too; the tint is faint enough to lie over the text. */
+    z-index: 3;
     opacity: 0;
     transition: opacity 0.15s ease;
 }

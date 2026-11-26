@@ -63,7 +63,7 @@ export class ViewManager {
     this.viewerCode = this.viewer.querySelector('code') as HTMLElement;
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
     this.preview = document.getElementById('preview')!;
-    this.finder = new ViewerFind(this.viewerCode);
+    this.finder = new ViewerFind(this.viewerCode, this.gutter);
 
     this.lineNumbers = options.lineNumbers;
     if (!this.lineNumbers) {
@@ -337,6 +337,11 @@ export class ViewManager {
     const container = document.getElementById('editor-container')!;
     container.style.setProperty('--editor-zoom', String(this.editorZoom));
     sessionStorage.setItem(this.ZOOM_KEY, String(this.editorZoom));
+    // The caret, scrolled into view while typing, stays clear of the pinned
+    // gutter (its width follows the zoom).
+    document.documentElement.style.scrollPaddingLeft = this.lineNumbers
+      ? `${this.gutter.offsetWidth}px`
+      : '';
     this.updateLineHighlight();
   }
 

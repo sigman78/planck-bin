@@ -139,4 +139,65 @@ test.describe('Long lines scroll the page', () => {
     await expect(page.locator('#line-highlight')).toHaveClass(/visible/);
     await expect.poll(() => page.evaluate(() => window.scrollX)).toBe(0);
   });
+
+  test('line numbers stay pinned at the left edge when scrolled sideways', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('wide', WIDE);
+    await page.goto('/wide.txt#L5');
+    await expect(page.locator('#line-highlight')).toHaveClass(/visible/);
+    await page.evaluate(() => window.scrollTo({ left: 2000, behavior: 'instant' }));
+    await expect.poll(() => page.evaluate(() => window.scrollX)).toBeGreaterThan(0);
+    const gutter = (await page.locator('#gutter').boundingBox())!;
+    expect(gutter.x).toBe(0);
+    await expect(page.locator('#L5')).toBeInViewport();
+    // The current-line highlight shows across the numbers too.
+    const hit = await page.evaluate(() => {
+      const box = document.querySelector('#L5')!.getBoundingClientRect();
+      return document
+        .elementsFromPoint(box.left + 2, box.top + box.height / 2)
+        .map((el) => el.id)
+        .filter(Boolean);
+    });
+    expect(hit.indexOf('line-highlight')).toBeLessThan(hit.indexOf('gutter'));
+  });
+
+  test('find keeps a match clear of the pinned line numbers', async ({ page }) => {
+    const store = await setupMockApi(page);
+    // The match is early in a line, after a far-right match moved the page sideways.
+    const text = WIDE.replace('line 3 ', 'line 3 needle ').replace(
+      'line 2 ' + 'x'.repeat(400),
+      'line 2 ' + 'x'.repeat(400) + ' needle'
+    );
+    store.set('wide', text);
+    await page.goto('/wide.txt');
+    await expect(page.locator(S.viewer)).toContainText('needle');
+    await openPalette(page);
+    await page.locator(S.paletteInput).fill('?needle');
+    await expect(page.locator(`${S.paletteSelected} kbd`)).toHaveText('1/2');
+    // Put the line 3 match under the pinned numbers, then step to it.
+    const needleRect = () =>
+      page.evaluate(() => {
+        const code = document.querySelector('#viewer code')!.firstChild as Text;
+        const at = code.data.indexOf('needle', code.data.indexOf('line 3 '));
+        const range = new Range();
+        range.setStart(code, at);
+        range.setEnd(code, at + 6);
+        const r = range.getBoundingClientRect();
+        return {
+          left: r.left,
+          gutterRight: document.querySelector('#gutter')!.getBoundingClientRect().right,
+        };
+      });
+    const before = await needleRect();
+    await page.evaluate(
+      (x) => window.scrollTo({ left: window.scrollX + x, behavior: 'instant' }),
+      before.left - 5
+    );
+    expect((await needleRect()).left).toBeLessThan(before.gutterRight);
+    await page.keyboard.press('Enter');
+    await expect(page.locator(`${S.paletteSelected} kbd`)).toHaveText('2/2');
+    const after = await needleRect();
+    const clear = after.left - after.gutterRight;
+    expect(clear).toBeGreaterThanOrEqual(0);
+  });
 });
