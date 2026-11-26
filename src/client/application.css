@@ -133,12 +133,19 @@ body {
     user-select: none;
     min-height: calc(100vh - 2 * var(--body-padding));
     box-sizing: border-box;
-    /* Long lines scroll the page sideways; the numbers stay at the window's
-       left edge, over the code sliding under them. */
-    position: sticky;
-    left: 0;
-    z-index: 2;
-    background: var(--color-bg);
+}
+
+/* Long lines scroll the page sideways; the numbers stay at the window's left
+   edge, over the code sliding under them. Only with a mouse or trackpad:
+   iOS Safari draws the page under its translucent toolbar but clips sticky
+   layers at the toolbar edge, so on touch screens the numbers scroll along. */
+@media (hover: hover) and (pointer: fine) {
+    #gutter {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--color-bg);
+    }
 }
 
 #gutter a, #gutter span {

@@ -201,3 +201,17 @@ test.describe('Long lines scroll the page', () => {
     expect(clear).toBeGreaterThanOrEqual(0);
   });
 });
+
+test.describe('Touch screens', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 700 } });
+
+  test('line numbers scroll with the page, not pinned', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('wide', WIDE);
+    await page.goto('/wide.txt');
+    await expect(page.locator(S.viewer)).toContainText('line 1');
+    expect(await page.locator('#gutter').evaluate((el) => getComputedStyle(el).position)).toBe(
+      'static'
+    );
+  });
+});
