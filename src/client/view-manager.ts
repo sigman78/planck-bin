@@ -17,6 +17,7 @@ import type { Highlighted } from './highlight-config';
 import { clearSyntax, paintSyntax, supportsHighlights, viewerText } from './syntax-highlights';
 import { currentTheme } from './highlight-theme';
 import { PrintListing, type PrintSource } from './print-listing';
+import { StickyScrollbar } from './sticky-scrollbar';
 import './syntax-base.css';
 
 export interface ViewCallbacks {
@@ -64,6 +65,8 @@ export class ViewManager {
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
     this.preview = document.getElementById('preview')!;
     this.finder = new ViewerFind(this.viewerCode, this.viewer);
+    new StickyScrollbar(this.viewer);
+    new StickyScrollbar(this.editor);
 
     this.lineNumbers = options.lineNumbers;
     if (!this.lineNumbers) {

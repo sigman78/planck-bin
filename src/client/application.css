@@ -263,6 +263,31 @@ body::before {
     transition: opacity 0.15s;
 }
 
+/* Stand-in for the viewer's / editor's own horizontal scrollbar while that
+   one is below the window edge (sticky-scrollbar.ts sets left and width). */
+.sticky-scrollbar {
+    position: fixed;
+    bottom: 0;
+    z-index: 10;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+}
+
+.sticky-scrollbar[hidden] {
+    display: none;
+}
+
+.sticky-scrollbar > div {
+    height: 1px;
+}
+
+@media print {
+    .sticky-scrollbar {
+        display: none;
+    }
+}
+
 #viewer:focus {
     outline: none;
 }
@@ -288,6 +313,9 @@ body::before {
 
 #viewer code {
     display: block;
+    /* The pre scrolls (find, keyboard, sticky-scrollbar.ts rely on it), not
+       this: syntax-base.css gives pre code.hljs its own overflow-x. */
+    overflow: visible;
     background: transparent !important;
     padding: 0;
     font-family: inherit;
