@@ -27,7 +27,6 @@ html[data-theme="solarized-light"],
 .theme-scope[data-theme="solarized-light"] {
     color-scheme: light;
     --overlay-l: 0;
-    --paper-noise-opacity: 0.04; /* grey grain reads weaker on a light page */
 
     --color-island-panel: oklch(0.9900 0.0120 90.10);
     --color-key-bg:       var(--sol-base2);
@@ -85,7 +84,6 @@ html[data-theme="github"],
 .theme-scope[data-theme="github"] {
     color-scheme: light;
     --overlay-l: 0;
-    --paper-noise-opacity: 0.04; /* grey grain reads weaker on a light page */
 
     --gh-fg:      oklch(0.2781 0.0117 248.25); /* #24292e */
     --gh-heading: oklch(0.2542 0.0111 254.04); /* #1f2328 */
