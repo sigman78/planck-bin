@@ -400,14 +400,14 @@ export class ViewManager {
     return true;
   }
 
-  /** Scroll the page so the given 1-based line sits mid-viewport. */
+  /** Scroll the page so the given 1-based line sits mid-viewport, line start in view. */
   private scrollToLine(line: number): void {
     const container = document.getElementById('editor-container')!;
     const lineHeight = parseFloat(getComputedStyle(container).lineHeight) || 20;
     const lineTop =
       container.getBoundingClientRect().top + window.scrollY + (line - 1) * lineHeight;
     const top = lineTop - window.innerHeight / 2 + lineHeight / 2;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
+    window.scrollTo({ top: Math.max(0, top), left: 0, behavior: 'instant' });
   }
 
   private adjustZoom(delta: number): void {

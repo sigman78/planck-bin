@@ -114,4 +114,29 @@ test.describe('Long lines scroll the page', () => {
     await expect(page.locator(`${S.paletteSelected} kbd`)).toHaveText('1/1');
     await expect.poll(() => page.evaluate(() => window.scrollX)).toBeGreaterThan(0);
   });
+
+  test('saving returns to the line starts, not the sideways position', async ({ page }) => {
+    await setupMockApi(page);
+    await page.goto('/');
+    await page.locator(S.editor).fill(WIDE);
+    await page.evaluate(() => window.scrollTo({ top: 300, left: 2000, behavior: 'instant' }));
+    await expect.poll(() => page.evaluate(() => window.scrollX)).toBeGreaterThan(0);
+    await page.locator(S.saveBtn).click();
+    await expect(page.locator(S.viewer)).toBeVisible();
+    await expect.poll(() => page.evaluate(() => [window.scrollX, window.scrollY])).toEqual([0, 0]);
+  });
+
+  test('go to line shows the line start', async ({ page }) => {
+    const store = await setupMockApi(page);
+    store.set('wide', WIDE);
+    await page.goto('/wide.txt');
+    await expect(page.locator(S.viewer)).toContainText('line 1');
+    await page.evaluate(() => window.scrollTo({ left: 2000, behavior: 'instant' }));
+    await expect.poll(() => page.evaluate(() => window.scrollX)).toBeGreaterThan(0);
+    await openPalette(page);
+    await page.locator(S.paletteInput).fill(':50');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#line-highlight')).toHaveClass(/visible/);
+    await expect.poll(() => page.evaluate(() => window.scrollX)).toBe(0);
+  });
 });
