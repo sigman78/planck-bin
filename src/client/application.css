@@ -107,6 +107,10 @@ body {
 	/* stacking context so the grain (z-index -1) paints above this
 	   background and below all page content */
 	isolation: isolate;
+	/* Long lines scroll the page, not the viewer or editor, so the scrollbar
+	   sits at the window bottom: the body grows to the widest line, its right
+	   padding included. A rendered preview wraps and stays window-wide. */
+	min-width: fit-content;
 }
 
 /* --- paper grain -------------------------------------------------------------
@@ -147,8 +151,6 @@ body::before {
     display: flex;
     align-items: flex-start;
     --editor-zoom: 1;
-    overflow-x: auto;
-    overflow-y: hidden;
     position: relative;
 
     /* Consolidated typography - all children inherit these */
@@ -238,6 +240,17 @@ body::before {
     line-height: inherit;
 }
 
+/* Sized to its content both ways, so long lines widen the page instead of
+   scrolling inside the textarea. Without field-sizing it keeps the inner
+   horizontal scroll. */
+@supports (field-sizing: content) {
+    #editor {
+        width: auto;
+        flex: 1 0 auto;
+        overflow: hidden;
+    }
+}
+
 #editor::placeholder {
     color: var(--color-placeholder);
 }
@@ -252,11 +265,9 @@ body::before {
     display: none;
     margin: 0;
     background: transparent;
-    width: 100%;
+    flex: 1 0 auto;
     white-space: pre;
-    overflow-x: auto;
     tab-size: 2;
-    scrollbar-width: thin;
     min-height: calc(100vh - 2 * var(--body-padding));
     position: relative;
     z-index: 1;
@@ -288,6 +299,8 @@ body::before {
 
 #viewer code {
     display: block;
+    /* syntax-base.css gives pre code.hljs its own overflow-x; here the page scrolls. */
+    overflow: visible;
     background: transparent !important;
     padding: 0;
     font-family: inherit;

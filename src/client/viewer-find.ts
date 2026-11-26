@@ -39,14 +39,8 @@ export class ViewerFind {
   private index = -1;
   private usedSelection = false;
 
-  /**
-   * @param root element whose text is searched (the viewer's code element)
-   * @param scroller horizontally scrolling ancestor (the viewer pre)
-   */
-  constructor(
-    private readonly root: HTMLElement,
-    private readonly scroller: HTMLElement
-  ) {}
+  /** @param root element whose text is searched (the viewer's code element) */
+  constructor(private readonly root: HTMLElement) {}
 
   search(query: string): FindStatus {
     this.clear();
@@ -112,15 +106,15 @@ export class ViewerFind {
     this.reveal(current);
   }
 
-  /** Scroll the page vertically and the viewer horizontally to the match. */
+  /**
+   * Scroll the page to the match: vertically to mid-window, and horizontally
+   * (long lines scroll the page) only when the match is outside the window.
+   */
   private reveal(range: Range): void {
     const rect = range.getBoundingClientRect();
     const top = rect.top + window.scrollY - window.innerHeight / 2 + rect.height / 2;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
-
-    const box = this.scroller.getBoundingClientRect();
-    if (rect.left < box.left || rect.right > box.right) {
-      this.scroller.scrollLeft += rect.left - box.left - box.width / 2;
-    }
+    const offscreen = rect.left < 0 || rect.right > window.innerWidth;
+    const left = offscreen ? rect.left + window.scrollX - window.innerWidth / 2 : window.scrollX;
+    window.scrollTo({ top: Math.max(0, top), left: Math.max(0, left), behavior: 'instant' });
   }
 }

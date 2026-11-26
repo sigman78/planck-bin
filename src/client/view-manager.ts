@@ -63,7 +63,7 @@ export class ViewManager {
     this.viewerCode = this.viewer.querySelector('code') as HTMLElement;
     this.gutter = document.getElementById('gutter') as HTMLDivElement;
     this.preview = document.getElementById('preview')!;
-    this.finder = new ViewerFind(this.viewerCode, this.viewer);
+    this.finder = new ViewerFind(this.viewerCode);
 
     this.lineNumbers = options.lineNumbers;
     if (!this.lineNumbers) {

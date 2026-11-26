@@ -37,7 +37,7 @@ describe('ViewerFind without the Highlight API', () => {
     document.body.innerHTML = '<pre><code></code></pre>';
     const code = document.querySelector('code')!;
     code.textContent = text;
-    return new ViewerFind(code, document.querySelector('pre')!);
+    return new ViewerFind(code);
   }
 
   it('selects the current match', () => {
