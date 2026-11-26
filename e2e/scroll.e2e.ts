@@ -79,6 +79,15 @@ test.describe('Sticky horizontal scrollbar', () => {
     await settle(page);
     await expect(bar).toBeVisible();
     expect(await bottomGap(page, 'viewer')).toBe(0);
+    // Full window width, up to the page's vertical scrollbar.
+    const box = (await bar.boundingBox())!;
+    const windowWidth = await page.evaluate(() => document.documentElement.clientWidth);
+    expect([box.x, Math.round(box.x + box.width)]).toEqual([0, windowWidth]);
+    // The last line ends above the bar, not under it.
+    const codeBottom = await page
+      .locator(`${S.viewer} code`)
+      .evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(codeBottom).toBeLessThanOrEqual(box.y + 0.5);
   });
 
   test('stays hidden when no line is wider than the viewer', async ({ page }) => {

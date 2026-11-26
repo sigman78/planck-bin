@@ -263,11 +263,12 @@ body::before {
     transition: opacity 0.15s;
 }
 
-/* Stand-in for the viewer's / editor's own horizontal scrollbar while that
-   one is below the window edge (sticky-scrollbar.ts sets left and width). */
+/* The viewer's / editor's horizontal scrollbar, at the window bottom edge
+   and full window width (sticky-scrollbar.ts sets the width). */
 .sticky-scrollbar {
     position: fixed;
     bottom: 0;
+    left: 0;
     z-index: 10;
     overflow-x: auto;
     overflow-y: hidden;

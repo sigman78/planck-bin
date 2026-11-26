@@ -4,9 +4,10 @@
  * editor textarea), moved to the bottom edge of the window. The element's own
  * scrollbar would sit after the last line, out of reach on a long paste.
  *
- * The bar is a fixed, empty scroller with a spacer as wide as the target's
- * content, laid over the target's columns; the two scroll positions are kept
- * in step both ways. The target's own horizontal scrollbar is hidden (CSS,
+ * The bar is a fixed, empty scroller across the window width, with a spacer
+ * that gives it the target's scroll range; the two scroll positions are kept
+ * in step both ways. While lines overflow, the target gets bottom padding
+ * for the bar, so the last line is not under it. The target's own horizontal scrollbar is hidden (CSS,
  * .has-sticky-scrollbar), so there is only ever one, always at the window
  * edge. The bar shows while the target is on screen and has lines wider than
  * itself. Overlay scrollbars (macOS, mobile) take no room, so there the bar
@@ -19,6 +20,8 @@ export class StickyScrollbar {
   private frame = 0;
   /** Whether this bar set the root's scroll-padding-bottom (two bars share it). */
   private padded = false;
+  /** Last measured bar height; the bar measures 0 while hidden. */
+  private barHeight = 0;
 
   constructor(private readonly target: HTMLElement) {
     this.bar = document.createElement('div');
@@ -85,18 +88,24 @@ export class StickyScrollbar {
     const onScreen = rect !== null && rect.top < window.innerHeight && rect.bottom > 0;
 
     this.bar.hidden = !onScreen;
-    if (!onScreen) {
-      this.setPadding(null);
-      return;
+    if (onScreen) {
+      // Full window width, up to the page's vertical scrollbar, like the
+      // page's own horizontal one would be; the scroll range is the target's.
+      const width = document.documentElement.clientWidth;
+      this.bar.style.width = `${width}px`;
+      this.spacer.style.width = `${width + t.scrollWidth - t.clientWidth}px`;
+      const overlay = this.bar.offsetHeight - this.bar.clientHeight === 0;
+      if (overlay) this.bar.classList.add('sticky-scrollbar-drawn');
+      this.follow(t, this.bar);
     }
-    this.bar.style.left = `${rect.left + t.clientLeft}px`;
-    this.bar.style.width = `${t.clientWidth}px`;
-    this.spacer.style.width = `${t.scrollWidth}px`;
-    const overlay = this.bar.offsetHeight - this.bar.clientHeight === 0;
-    if (overlay) this.bar.classList.add('sticky-scrollbar-drawn');
-    this.follow(t, this.bar);
+    // Room under the last line for the bar, as the hidden native scrollbar
+    // took. Set while the lines overflow, not only while on screen, so the
+    // height does not change with page scrolling.
+    const room = needed ? this.bar.offsetHeight || this.barHeight : 0;
+    if (room) this.barHeight = room;
+    t.style.paddingBottom = room ? `${room}px` : '';
     // Keep the caret or a scrolled-to line out from under the bar.
-    this.setPadding(this.bar.offsetHeight);
+    this.setPadding(onScreen ? this.bar.offsetHeight : null);
   }
 
   private setPadding(px: number | null): void {
