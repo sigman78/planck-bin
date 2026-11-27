@@ -944,7 +944,7 @@ function modifierIcon(mod: ModifierKey): SVGSVGElement {
 }
 
 /**
- * A shortcut as key caps: an icon per modifier, then the main key. Assistive
+ * A shortcut: an icon per modifier, then the main key as a cap. Assistive
  * technology gets the text form ("Alt+Shift+P") as the label of one image.
  */
 function shortcutKeys(shortcut: Shortcut): HTMLElement {
@@ -959,7 +959,7 @@ function shortcutKeys(shortcut: Shortcut): HTMLElement {
     kbd.appendChild(cap);
   }
   const cap = document.createElement('span');
-  cap.className = 'island-key';
+  cap.className = 'island-key island-key-main';
   cap.setAttribute('aria-hidden', 'true');
   cap.textContent = shortcut.key.toUpperCase();
   kbd.appendChild(cap);
