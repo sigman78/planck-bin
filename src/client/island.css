@@ -21,7 +21,16 @@
     font-family: var(--font-ui);
     font-size: 12px;
     line-height: 1.4;
-    box-shadow: 0 0 0 1px var(--color-island-edge);
+    /*
+     * Folded: edge, then a ring in the page background that cuts the pill off
+     * from the current-line band and code scrolling under it (they share
+     * nearly the same lightness in several themes). Every state keeps these
+     * three layers in this order so box-shadow transitions pair them up.
+     */
+    box-shadow:
+        0 0 0 1px var(--color-island-edge),
+        0 0 0 4px var(--color-bg),
+        0 0 0 0 transparent;
     transition:
         width 0.5s var(--island-spring),
         height 0.5s var(--island-spring),
@@ -68,13 +77,32 @@
     0% {
         box-shadow:
             0 0 0 1px var(--color-island-edge),
-            0 0 0 0 var(--color-island-pulse);
+            0 0 0 4px var(--color-bg),
+            0 0 0 4px var(--color-island-pulse);
     }
     70%,
     100% {
         box-shadow:
             0 0 0 1px var(--color-island-edge),
-            0 0 0 10px transparent;
+            0 0 0 4px var(--color-bg),
+            0 0 0 14px transparent;
+    }
+}
+
+/* Open/prompting pulse: no ring, the panel keeps its drop shadow. */
+@keyframes island-pulse-open {
+    0% {
+        box-shadow:
+            0 0 0 1px var(--color-island-edge),
+            0 0 0 0 var(--color-island-pulse),
+            0 12px 36px var(--color-island-shadow);
+    }
+    70%,
+    100% {
+        box-shadow:
+            0 0 0 1px var(--color-island-edge),
+            0 0 0 10px transparent,
+            0 12px 36px var(--color-island-shadow);
     }
 }
 
@@ -83,8 +111,9 @@
     border-radius: 14px;
     background: var(--color-island-panel);
     box-shadow:
-        0 12px 36px var(--color-island-shadow),
-        0 0 0 1px var(--color-island-edge);
+        0 0 0 1px var(--color-island-edge),
+        0 0 0 0 var(--color-bg),
+        0 12px 36px var(--color-island-shadow);
 }
 
 /* --- folded content ------------------------------------------------------- */
@@ -344,7 +373,7 @@
 }
 
 #island.prompting {
-    animation: island-pulse 2.4s ease-out 0.6s 2;
+    animation: island-pulse-open 2.4s ease-out 0.6s 2;
 }
 
 .island-prompt p {
