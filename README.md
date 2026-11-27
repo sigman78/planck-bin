@@ -75,4 +75,4 @@ pnpm test:api      # API integration tests (needs `pnpm dev` running)
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Based on the original Haste by [John Crepezzi](https://github.com/seejohnrun).
+MIT, see [LICENSE](LICENSE). Inspired by Haste-bin [John Crepezzi](https://github.com/seejohnrun).
