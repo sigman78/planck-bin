@@ -528,7 +528,9 @@
 .island-list {
     max-height: 208px; /* 8 rows */
     overflow-y: auto;
-    padding: 4px 0;
+    padding: 6px 0;
+    /* scrollIntoView ignores padding; keep a row scrolled into view off the edge */
+    scroll-padding-block: 6px;
     overscroll-behavior: contain;
 }
 
@@ -573,9 +575,14 @@
     justify-content: space-between;
     align-items: center;
     gap: 16px;
-    margin: 0 4px; /* inset selection; text stays 14px from the edge */
-    padding: 5px 10px;
-    border-radius: 6px;
+    /*
+     * Selection is inset 6px on every side (list padding above and below), so
+     * its 8px radius is concentric with the 14px panel corners. Text stays
+     * 14px from the edge.
+     */
+    margin: 0 6px;
+    padding: 5px 8px;
+    border-radius: 8px;
     line-height: 16px;
     white-space: nowrap;
     color: var(--color-editor-text);
